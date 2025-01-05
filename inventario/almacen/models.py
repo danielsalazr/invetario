@@ -5,6 +5,10 @@ from rich.console import Console
 console = Console()
 # Create your models here.
 
+class Bodega(models.Model):
+    id = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=30)
+
 
 class Ubicacion(models.Model):
     id = models.AutoField(primary_key=True)
@@ -12,6 +16,10 @@ class Ubicacion(models.Model):
     nivel = models.IntegerField(default=0)
     padre_id = models.ForeignKey('self', on_delete=models.DO_NOTHING, related_name="padre", null=True, blank=True)
     nomenclatura = models.CharField(max_length=25)
+    bodega = models.ForeignKey(Bodega, on_delete=models.DO_NOTHING, related_name="bodega")
+
+
+
 
 
 
@@ -20,8 +28,35 @@ class Articulo(models.Model):
     code = models.CharField(primary_key=True, max_length=30, unique=True)
     descripcion = models.CharField(max_length=255)
     observacion = models.CharField(max_length=255, null=True, blank=True)
+    marca = models.CharField(max_length=255, null=True, blank=True)
+    unidad_de_medida = models.CharField(max_length=255, null=True, blank=True)
+    
+
+    class Meta:
+        managed = True
+        verbose_name = "Articulo"
+        verbose_name_plural = "Articulos"
+    
+
+    def __str__(self):
+        return f"{self.descripcion}"
+
+
+    
+
+class FotosArticulos(models.Model):
+    id = models.AutoField(primary_key=True)
+    articulo = models.ForeignKey(Articulo, on_delete=models.DO_NOTHING, related_name="articuloFoto",)
     foto = models.ImageField(upload_to='fotos_articulos/')
 
+
+    class Meta:
+        managed = True
+        verbose_name = "Fotos de Articulos"
+        verbose_name_plural = "Fotos de Articulos"
+    
+    def __str__(self):
+        return f"{self.articulo}"
 
     def save(self, *args, **kwargs):
         # Llama al método original `save` para guardar temporalmente la imagen
@@ -75,3 +110,6 @@ class Salidas(models.Model):
     Articulo = models.ForeignKey(Articulo, on_delete=models.DO_NOTHING, related_name="articulos",)
     cantidad = models.IntegerField(default=1)
     fecha = models.DateTimeField(auto_now=timezone.now)
+
+
+# class Movimientos(models.Model):
