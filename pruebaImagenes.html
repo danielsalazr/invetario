@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Previsualizar y eliminar imágenes</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+
+<body>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-6 offset-md-3">
+                <form id="formulario">
+                    <div class="form-group">
+                        <input type="file" id="imagenes" multiple accept="image/*">
+                        <div id="previsualizadores" class="mt-2"></div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Enviar</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <button id="seleccionar-imagenes">Seleccionar imágenes y copiar al portapapeles</button>
+
+    <script>
+
+        const botonSeleccionarImagenes = document.getElementById('seleccionar-imagenes');
+        const imagenesInput = document.getElementById('imagenes');
+        const previsualizadores = document.getElementById('previsualizadores');
+
+        function seleccionarImagenes() {
+            const imagenes = document.querySelectorAll('img');
+            return imagenes;
+        }
+
+        // Función para copiar las imágenes al portapapeles
+        async function copiarImagenesAlPortapapeles(imagenes) {
+            for (const imagen of imagenes) {
+                const respuesta = await fetch(imagen.src);
+                const blob = await respuesta.blob();
+                const tipoArchivo = blob.type;
+                if (tipoArchivo === 'image/jpeg') {
+                    const imagenPNG = await convertirImagenAJPEG(blob);
+                    const item = new ClipboardItem({
+                        'image/png': imagenPNG,
+                    });
+                    await navigator.clipboard.write([item]);
+                } else {
+                    const item = new ClipboardItem({
+                        [tipoArchivo]: blob,
+                    });
+                    await navigator.clipboard.write([item]);
+                }
+                console.log(`Imagen ${imagen.src} copiada al portapapeles`);
+                await new Promise(resolve => setTimeout(resolve, 100)); // Esperar 100ms antes de copiar la siguiente imagen
+            }
+        }
+
+        async function convertirImagenAJPEG(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const imagen = new Image();
+                    imagen.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = imagen.width;
+                        canvas.height = imagen.height;
+                        const contexto = canvas.getContext('2d');
+                        contexto.drawImage(imagen, 0, 0);
+                        canvas.toBlob((blobPNG) => {
+                            resolve(blobPNG);
+                        }, 'image/png');
+                    };
+                    imagen.src = reader.result;
+                };
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        botonSeleccionarImagenes.addEventListener('click', async () => {
+            const imagenes = seleccionarImagenes();
+            await copiarImagenesAlPortapapeles(imagenes);
+        });
+
+        function actualizarArchivos() {
+            const archivos = Array.from(imagenesInput.files);
+            previsualizadores.innerHTML = '';
+            archivos.forEach((archivo, index) => {
+
+
+                const reader = new FileReader();
+                const previsualizador = document.createElement('div');
+                previsualizador.style.position = 'relative';
+                previsualizador.style.width = '120px';
+                previsualizador.style.height = '120px';
+                previsualizador.style.border = '1px solid #ddd';
+                previsualizador.style.padding = '5px';
+                previsualizador.style.display = 'inline-block';
+                previsualizador.style.margin = '5px';
+
+                const botonEliminar = document.createElement('button');
+                botonEliminar.textContent = 'X';
+                botonEliminar.style.position = 'absolute';
+                botonEliminar.style.top = '5px';
+                botonEliminar.style.right = '5px';
+                botonEliminar.style.background = 'red';
+                botonEliminar.style.color = 'white';
+                botonEliminar.style.border = 'none';
+                botonEliminar.style.borderRadius = '50%';
+                botonEliminar.style.cursor = 'pointer';
+                botonEliminar.style.width = '20px';
+                botonEliminar.style.height = '20px';
+                botonEliminar.style.display = 'flex';
+                botonEliminar.style.alignItems = 'center';
+                botonEliminar.style.justifyContent = 'center';
+                botonEliminar.style.fontSize = '12px';
+
+                botonEliminar.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    eliminarArchivo(index);
+                });
+
+                reader.onload = (e) => {
+                    const imagen = e.target.result;
+                    const imgElement = document.createElement('img');
+                    imgElement.src = imagen;
+                    imgElement.style.width = '100%';
+                    imgElement.style.height = '100%';
+                    imgElement.style.objectFit = 'cover';
+                    previsualizador.appendChild(imgElement);
+                    previsualizador.appendChild(botonEliminar);
+                    previsualizadores.appendChild(previsualizador);
+                };
+
+                reader.readAsDataURL(archivo);
+            });
+        }
+
+        function eliminarArchivo(index) {
+            const dt = new DataTransfer();
+            for (let i = 0; i < imagenesInput.files.length; i++) {
+                console.log(`iterador: ${i}, index ${index}`)
+                if (i !== index) {
+                    dt.items.add(imagenesInput.files[i]);
+                }
+            }
+            imagenesInput.files = dt.files;
+            actualizarArchivos();
+        }
+
+        imagenesInput.addEventListener('change', (e) => {
+            const archivos = Array.from(e.target.files);
+            actualizarArchivos();
+        });
+    </script>
+</body>
+
+</html>

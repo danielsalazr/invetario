@@ -26,10 +26,68 @@
   </button>
   <canvas id="canvas" style="display: none"></canvas>
 
+  <div class="container">
+    <div class="row">
+      <div class="col-md-6 offset-md-3">
+        <form id="formulario">
+          <div class="form-group">
+            <input type="file" id="imagenes" multiple accept="image/*" />
+            <div id="previsualizadores" class="mt-2"></div>
+          </div>
+          <button type="submit" class="btn btn-primary">Enviar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <input type="submit" value="submit" />
 </form>
 
 <script src="{% static 'js/sweetAlert.js' %}"></script>
 <script src="{% static 'js/articulos.js' %}"></script>
+
+<script>
+  // JavaScript
+  // JavaScript
+  //const formulario = document.getElementById('formulario');
+  const imagenesInput = document.getElementById("imagenes");
+  const previsualizadores = document.getElementById("previsualizadores");
+
+  imagenesInput.addEventListener("change", (e) => {
+    const archivos = e.target.files;
+    previsualizadores.innerHTML = "";
+
+    if (archivos.length > 0) {
+      Array.from(archivos).forEach((archivo) => {
+        const reader = new FileReader();
+        const previsualizador = document.createElement("div");
+        previsualizador.style.width = "120px";
+        previsualizador.style.height = "120px";
+        previsualizador.style.border = "1px solid #ddd";
+        previsualizador.style.padding = "5px";
+        previsualizador.style.display = "inline-block";
+        previsualizador.style.margin = "5px";
+
+        reader.onload = (e) => {
+          const imagen = e.target.result;
+          previsualizador.innerHTML = `<img src="${imagen}" style="width: 100%; height: 100%; object-fit: cover;">`;
+          previsualizadores.appendChild(previsualizador);
+        };
+
+        reader.readAsDataURL(archivo);
+      });
+    }
+  });
+
+  // Enviar la petición AJAX
+  /*fetch('/endpoint', {
+    method: 'POST',
+    body: formData,
+  })
+  .then((response) => response.json())
+  .then((data) => console.log(data))
+  .catch((error) => console.error(error));
+});*/
+</script>
 
 {% endblock container %}
