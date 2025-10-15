@@ -20,12 +20,10 @@ class Ubicacion(models.Model):
 
 
 
-
-
-
 class Articulo(models.Model):
     # id = models.IntegerField(default= self.objects.count + 1)
-    code = models.CharField(primary_key=True, max_length=30, unique=True)
+    code = models.AutoField(primary_key=True)
+    # code = models.CharField(primary_key=True, max_length=30, unique=True)
     descripcion = models.CharField(max_length=255)
     observacion = models.CharField(max_length=255, null=True, blank=True)
     marca = models.CharField(max_length=255, null=True, blank=True)

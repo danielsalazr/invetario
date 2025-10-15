@@ -3,6 +3,7 @@ djangorestframework
 django-environ==0.8
 django-excel
 mysqlclient
+django-imagekit
 pillow
 pyexcel
 pyexcel_xlsx

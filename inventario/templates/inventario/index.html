@@ -1,93 +1,922 @@
-{% extends "base.html" %} {% load static %} {% block container %}
+{% extends "base.html" %}
+{% load static %}
+{% block container %}
 
-<form action="" id="formArticulo" enctype="multipart/form-data">
-  <label for="">Codigo:</label>
-  <input type="text" name="code" id="code" />
+<style>
+  :root {
+    color-scheme: light;
+    --accent: #2563eb;
+    --accent-strong: #1d4ed8;
+    --accent-soft: #dbeafe;
+    --border: #e2e8f0;
+    --surface: #f8fafc;
+    --surface-strong: #eef2ff;
+    --text: #0f172a;
+    --text-muted: #475569;
+  }
 
-  <label for="">Descripcion:</label>
-  <input type="text" name="descripcion" id="descripcion" />
+  body {
+    margin: 0;
+    background: var(--surface);
+    font-family: "Segoe UI", Roboto, sans-serif;
+    color: var(--text);
+  }
 
-  <label for="">Observacion:</label>
-  <input type="text" name="observacion" id="observacion" />
+  .inventory-page {
+    min-height: 100vh;
+    padding: 2rem 3vw 3rem;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+  }
 
-  <label for="foto">Foto</label>
-  <input type="file" name="foto" id="foto" />
-  {% comment %} accept="image/*" capture="camera" {% endcomment %}
+  .inventory-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1.5rem;
+    align-items: flex-start;
+  }
 
-  <video
-    id="video"
-    autoplay
-    playsinline
-    style="display: none; width: 100%; max-width: 600px"
-  ></video>
-  <button type="button" id="startCamera" formnovalidate>Activar Cámara</button>
-  <button type="button" id="takePhoto" style="display: none" formnovalidate>
-    Tomar Foto
-  </button>
-  <canvas id="canvas" style="display: none"></canvas>
+  .inventory-header h1 {
+    margin: 0 0 0.5rem;
+    font-size: 2rem;
+    font-weight: 600;
+  }
 
-  <div class="container">
-    <div class="row">
-      <div class="col-md-6 offset-md-3">
-        <form id="formulario">
-          <div class="form-group">
-            <input type="file" id="imagenes" multiple accept="image/*" />
-            <div id="previsualizadores" class="mt-2"></div>
-          </div>
-          <button type="submit" class="btn btn-primary">Enviar</button>
-        </form>
+  .inventory-header p {
+    margin: 0;
+    color: var(--text-muted);
+    max-width: 38rem;
+    line-height: 1.4;
+  }
+
+  .inventory-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: white;
+    padding: 0.35rem 0.75rem;
+    min-width: 220px;
+  }
+
+  .search-box input {
+    border: none;
+    outline: none;
+    flex: 1;
+    font-size: 0.95rem;
+    background: transparent;
+    color: var(--text);
+  }
+
+  .search-box button {
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1.1rem;
+  }
+
+  .primary-button {
+    background: var(--accent);
+    border: none;
+    color: white;
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 0.65rem 1.5rem;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  .primary-button:hover {
+    background: var(--accent-strong);
+  }
+
+  .secondary-button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-weight: 600;
+    border-radius: 999px;
+    padding: 0.6rem 1.4rem;
+    cursor: pointer;
+    transition: background 0.2s ease, border 0.2s ease;
+  }
+
+  .secondary-button:hover {
+    background: var(--surface-strong);
+    border-color: var(--accent-soft);
+  }
+
+  .photo-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .file-trigger {
+    position: relative;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.6rem 1.4rem;
+    border-radius: 999px;
+    border: 1px dashed var(--accent);
+    background: white;
+    color: var(--accent-strong);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .file-trigger input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .dashboard-grid {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  }
+
+  .metric-card {
+    background: white;
+    border-radius: 14px;
+    padding: 1rem 1.2rem;
+    border: 1px solid var(--border);
+    box-shadow: 0 10px 25px -20px rgba(15, 23, 42, 0.45);
+  }
+
+  .metric-card h3 {
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin: 0 0 0.35rem;
+  }
+
+  .metric-card span {
+    font-size: 1.65rem;
+    font-weight: 700;
+  }
+
+  .inventory-layout {
+    display: grid;
+    grid-template-columns: 360px 1fr 320px;
+    gap: 1.5rem;
+  }
+
+  .inventory-form {
+    background: white;
+    border-radius: 16px;
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    position: relative;
+  }
+
+  .form-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .form-header h2 {
+    margin: 0;
+    font-size: 1.25rem;
+  }
+
+  .icon-button {
+    border: none;
+    background: var(--surface-strong);
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .form-description {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.35;
+  }
+
+  .form-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .form-group label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .form-group input,
+  .form-group textarea,
+  .form-group select {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.65rem 0.75rem;
+    font-size: 0.95rem;
+    font-family: inherit;
+    background: white;
+  }
+
+  .form-group textarea {
+    resize: vertical;
+    min-height: 70px;
+  }
+
+  .form-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .form-footer .hint {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+  }
+
+  .preview-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .preview-item {
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    background: var(--surface-strong);
+    position: relative;
+    padding-top: 100%;
+  }
+
+  .preview-item img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .preview-item .remove-preview {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.35rem;
+    border: none;
+    background: rgba(15, 23, 42, 0.65);
+    color: white;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .preview-item .remove-preview:hover {
+    background: rgba(15, 23, 42, 0.8);
+  }
+
+  .preview-empty {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 0;
+  }
+
+  .camera-container {
+    margin-top: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: white;
+    display: none;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .camera-container[data-visible="true"] {
+    display: flex;
+  }
+
+  .camera-preview {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    background: black;
+    object-fit: cover;
+  }
+
+  .camera-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding: 0 0.75rem 0.75rem;
+  }
+
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .gallery-grid img {
+    border-radius: 12px;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .gallery-grid img:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 25px -24px rgba(37, 99, 235, 0.9);
+  }
+
+  .gallery-grid img:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 25px -24px rgba(37, 99, 235, 0.9);
+  }
+
+  .inventory-table-card {
+    background: white;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  table {
+    border-spacing: 0;
+    width: 100%;
+    font-size: 0.93rem;
+  }
+
+  thead {
+    background: var(--surface-strong);
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  thead th {
+    text-align: left;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  tbody tr:hover,
+  tbody tr[aria-selected="true"] {
+    background: var(--accent-soft);
+  }
+
+  tbody td {
+    padding: 0.85rem 1rem;
+    vertical-align: top;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 2.75rem 1rem;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+  }
+
+  .side-panel {
+    background: white;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .side-panel header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .side-panel header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+
+  .side-panel .meta {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .meta-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .gallery-grid img {
+    border-radius: 12px;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: var(--surface-strong);
+    color: var(--text-muted);
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .stock-highlight {
+    font-weight: 700;
+    color: var(--accent-strong);
+  }
+
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(6px);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 1rem;
+    padding: 2rem;
+    z-index: 999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+
+  .lightbox[data-visible="true"] {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .lightbox-content {
+    position: relative;
+    width: min(90vw, 880px);
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .lightbox-figure {
+    position: relative;
+    border-radius: 18px;
+    overflow: hidden;
+    background: radial-gradient(circle at top, #1d4ed8 0%, #0f172a 60%);
+    border: 1px solid rgba(226, 232, 240, 0.2);
+  }
+
+  .lightbox-image {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 70vh;
+    object-fit: contain;
+    background: rgba(15, 23, 42, 0.85);
+  }
+
+  .lightbox-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: white;
+    font-size: 0.95rem;
+    padding: 0 0.5rem;
+  }
+
+  .lightbox-meta span {
+    opacity: 0.8;
+  }
+
+  .lightbox-close {
+    position: absolute;
+    top: 1.25rem;
+    right: 1.25rem;
+    border: none;
+    background: rgba(15, 23, 42, 0.6);
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    color: white;
+    font-size: 1.4rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+
+  .lightbox-close:hover {
+    background: rgba(15, 23, 42, 0.85);
+    transform: translateY(-1px);
+  }
+
+  .lightbox-nav {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 0 0.75rem;
+    transform: translateY(-50%);
+    pointer-events: none;
+  }
+
+  .lightbox-nav button {
+    border: none;
+    background: rgba(15, 23, 42, 0.6);
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    color: white;
+    font-size: 1.6rem;
+    cursor: pointer;
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+
+  .lightbox-nav button:hover {
+    background: rgba(15, 23, 42, 0.85);
+    transform: scale(1.04);
+  }
+
+  .lightbox-nav button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .inventory-form[data-collapsed="true"] {
+    transform: translateX(-12px);
+    opacity: 0.25;
+    pointer-events: none;
+  }
+
+  @media (max-width: 1200px) {
+    .inventory-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .inventory-form[data-collapsed="true"] {
+      transform: translateY(-8px);
+    }
+  }
+
+  @media (max-width: 768px) {
+    .inventory-page {
+      padding: 1.5rem 1.25rem 2rem;
+    }
+
+    .inventory-actions {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .search-box {
+      width: 100%;
+    }
+
+    .inventory-layout {
+      gap: 1rem;
+    }
+  }
+</style>
+
+<section class="inventory-page">
+  <header class="inventory-header">
+    <div>
+      <h1>Gestiona tu inventario</h1>
+      <p>
+        Registra productos, consulta existencias y controla las ubicaciones sin
+        salir de esta pantalla.
+      </p>
+    </div>
+    <div class="inventory-actions">
+      <div class="search-box">
+        <input
+          type="search"
+          id="busquedaArticulo"
+          placeholder="Buscar por codigo, descripcion o marca"
+          autocomplete="off"
+        />
+        <button type="button" id="limpiarBusqueda" title="Limpiar busqueda">
+          &times;
+        </button>
       </div>
+      <button type="button" id="mostrarFormulario" class="primary-button">
+        Nuevo articulo
+      </button>
+    </div>
+  </header>
+
+  <section class="dashboard-grid" id="resumenInventario">
+    <article class="metric-card">
+      <h3>Articulos registrados</h3>
+      <span data-metric="articulos">0</span>
+    </article>
+    <article class="metric-card">
+      <h3>Existencias totales</h3>
+      <span data-metric="existencias">0</span>
+    </article>
+    <article class="metric-card">
+      <h3>Ubicaciones activas</h3>
+      <span data-metric="ubicaciones">0</span>
+    </article>
+    <article class="metric-card">
+      <h3>Articulos con foto</h3>
+      <span data-metric="fotos">0</span>
+    </article>
+  </section>
+
+  <section class="inventory-layout">
+    <aside class="inventory-form" id="panelFormulario" data-collapsed="false">
+      <div class="form-header">
+        <h2 id="formularioTitulo">Registrar articulo</h2>
+        <button type="button" class="icon-button" id="cerrarFormulario">
+          &times;
+        </button>
+      </div>
+      <p class="form-description">
+        Completa la informacion del articulo para que quede disponible en el
+        inventario. Puedes adjuntar una fotografia opcional.
+      </p>
+
+      <form id="formArticulo" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <div class="form-grid">
+          <div class="form-group">
+            <label for="code">Codigo *</label>
+            <input
+              type="text"
+              name="code"
+              id="code"
+              maxlength="30"
+              required
+              placeholder="Ej: A-001"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="descripcion">Descripcion *</label>
+            <textarea
+              name="descripcion"
+              id="descripcion"
+              maxlength="255"
+              required
+              placeholder="Describe el articulo"
+            ></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="marca">Marca</label>
+            <input
+              type="text"
+              name="marca"
+              id="marca"
+              maxlength="255"
+              placeholder="Marca o fabricante"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="unidad_de_medida">Unidad de medida</label>
+            <input
+              type="text"
+              name="unidad_de_medida"
+              id="unidad_de_medida"
+              maxlength="255"
+              placeholder="Ej: Unidad, Caja, Litros"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="observacion">Observacion</label>
+            <textarea
+              name="observacion"
+              id="observacion"
+              maxlength="255"
+              placeholder="Notas adicionales (opcional)"
+            ></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="foto">Fotografias</label>
+            <div class="photo-toolbar">
+              <label class="file-trigger">
+                Seleccionar desde dispositivo
+                <input
+                  type="file"
+                  name="foto"
+                  id="foto"
+                  accept="image/*"
+                  multiple
+                />
+              </label>
+              <button type="button" class="secondary-button" id="abrirCamara">
+                Usar camara
+              </button>
+            </div>
+            <div
+              class="camera-container"
+              id="cameraContainer"
+              data-visible="false"
+            >
+              <video
+                id="cameraVideo"
+                class="camera-preview"
+                autoplay
+                playsinline
+              ></video>
+              <canvas id="cameraCanvas" hidden></canvas>
+              <div class="camera-actions">
+                <button type="button" class="secondary-button" id="cerrarCamara">
+                  Cerrar
+                </button>
+                <button type="button" class="primary-button" id="capturarFoto">
+                  Tomar foto
+                </button>
+              </div>
+            </div>
+            <p class="preview-empty" id="sinFotosHint">
+              No has seleccionado fotografias.
+            </p>
+            <div class="preview-list" id="previewFoto"></div>
+          </div>
+        </div>
+
+        <div class="form-footer">
+          <button type="submit" class="primary-button" id="guardarArticulo">
+            Guardar articulo
+          </button>
+          <span class="hint"
+            >Los campos marcados con * son obligatorios. El codigo debe ser
+            unico.</span
+          >
+        </div>
+      </form>
+    </aside>
+
+    <section class="inventory-table-card">
+      <table aria-describedby="tablaArticulos">
+        <thead>
+          <tr>
+            <th scope="col">Codigo</th>
+            <th scope="col">Descripcion</th>
+            <th scope="col">Marca</th>
+            <th scope="col">Unidad</th>
+            <th scope="col">Existencias</th>
+          </tr>
+        </thead>
+        <tbody id="listaArticulos">
+          <tr class="empty-state">
+            <td colspan="5">No se encontraron articulos registrados.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <aside class="side-panel" id="detalleArticulo">
+      <header>
+        <h3>Detalle del articulo</h3>
+        <span class="badge" id="detalleCodigo">Sin seleccionar</span>
+      </header>
+      <p id="detalleDescripcion" class="form-description">
+        Selecciona un articulo del listado para revisar su informacion y
+        fotografias.
+      </p>
+      <div class="meta" id="detalleMeta"></div>
+      <div class="gallery-grid" id="detalleGaleria"></div>
+    </aside>
+  </section>
+</section>
+
+<section
+  class="lightbox"
+  id="galeriaModal"
+  data-visible="false"
+  aria-modal="true"
+  role="dialog"
+>
+  <div class="lightbox-content">
+    <button
+      type="button"
+      class="lightbox-close"
+      id="cerrarModalGaleria"
+      aria-label="Cerrar visor de imagenes"
+    >
+      &times;
+    </button>
+    <figure class="lightbox-figure">
+      <img
+        src=""
+        alt=""
+        id="lightboxImagen"
+        class="lightbox-image"
+        draggable="false"
+      />
+      <div class="lightbox-nav">
+        <button type="button" id="prevImagen" aria-label="Imagen anterior">
+          &#8249;
+        </button>
+        <button type="button" id="nextImagen" aria-label="Imagen siguiente">
+          &#8250;
+        </button>
+      </div>
+    </figure>
+    <div class="lightbox-meta">
+      <strong id="lightboxDescripcion"></strong>
+      <span id="lightboxIndice"></span>
     </div>
   </div>
+</section>
 
-  <input type="submit" value="submit" />
-</form>
+<template id="filaArticuloTemplate">
+  <tr>
+    <td data-field="code"></td>
+    <td data-field="descripcion"></td>
+    <td data-field="marca"></td>
+    <td data-field="unidad_de_medida"></td>
+    <td data-field="existencias"></td>
+  </tr>
+</template>
+
+<script>
+  window.inventarioConfig = {
+    endpoints: {
+      articulos: "{% url 'articulos' %}",
+    },
+  };
+</script>
 
 <script src="{% static 'js/sweetAlert.js' %}"></script>
 <script src="{% static 'js/articulos.js' %}"></script>
-
-<script>
-  // JavaScript
-  // JavaScript
-  //const formulario = document.getElementById('formulario');
-  const imagenesInput = document.getElementById("imagenes");
-  const previsualizadores = document.getElementById("previsualizadores");
-
-  imagenesInput.addEventListener("change", (e) => {
-    const archivos = e.target.files;
-    previsualizadores.innerHTML = "";
-
-    if (archivos.length > 0) {
-      Array.from(archivos).forEach((archivo) => {
-        const reader = new FileReader();
-        const previsualizador = document.createElement("div");
-        previsualizador.style.width = "120px";
-        previsualizador.style.height = "120px";
-        previsualizador.style.border = "1px solid #ddd";
-        previsualizador.style.padding = "5px";
-        previsualizador.style.display = "inline-block";
-        previsualizador.style.margin = "5px";
-
-        reader.onload = (e) => {
-          const imagen = e.target.result;
-          previsualizador.innerHTML = `<img src="${imagen}" style="width: 100%; height: 100%; object-fit: cover;">`;
-          previsualizadores.appendChild(previsualizador);
-        };
-
-        reader.readAsDataURL(archivo);
-      });
-    }
-  });
-
-  // Enviar la petición AJAX
-  /*fetch('/endpoint', {
-    method: 'POST',
-    body: formData,
-  })
-  .then((response) => response.json())
-  .then((data) => console.log(data))
-  .catch((error) => console.error(error));
-});*/
-</script>
 
 {% endblock container %}
