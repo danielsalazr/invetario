@@ -95,6 +95,10 @@ def ubicaciones(request):
     return render(request, "inventario/ubicaciones.html", {})
 
 
+def mapa_ubicaciones(request):
+    return render(request, "inventario/mapa_fisico.html", {})
+
+
 class UbicacionesView(APIView):
     def get(self, request):
         bodega_id = request.GET.get("bodega")
