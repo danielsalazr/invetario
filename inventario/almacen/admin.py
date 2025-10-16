@@ -10,6 +10,28 @@ console=Console()
 # admin.site.register(Estado)
 # admin.site.register(Inventario)
 admin.site.register(models.FotosArticulos)
+@admin.register(models.Bodega)
+class BodegaAdmin(admin.ModelAdmin):
+    search_fields = ("nombre",)
+    list_display = ("nombre",)
+
+
+@admin.register(models.Ubicacion)
+class UbicacionAdmin(admin.ModelAdmin):
+    list_display = (
+        "nombre",
+        "numero",
+        "tipo",
+        "nivel",
+        "bodega",
+        "padre",
+        "nomenclatura",
+    )
+    list_filter = ("tipo", "bodega")
+    search_fields = ("nombre", "nomenclatura", "numero__exact", "bodega__nombre")
+    autocomplete_fields = ("padre", "bodega")
+    readonly_fields = ("numero", "nivel", "creado_en", "actualizado_en")
+
 
 class FotosInline(admin.StackedInline):
     model = models.FotosArticulos
@@ -99,4 +121,3 @@ class InventarioAdmin(admin.ModelAdmin):
 #         'nombre',
 #         # 'enableCopy',
 #     )
-

@@ -9,11 +9,16 @@ from rest_framework.views import APIView
 
 from .models import (
     Articulo,
+    Bodega,
     FotosArticulos,
     Inventario,
     Ubicacion,
 )
-from .serializers import ArticuloSerializer
+from .serializers import (
+    ArticuloSerializer,
+    UbicacionCreateSerializer,
+    UbicacionTreeSerializer,
+)
 
 
 def articulo(request):
@@ -84,3 +89,84 @@ class Articulos(APIView):
         ).data
 
         return Response(respuesta, status=status.HTTP_201_CREATED)
+
+
+def ubicaciones(request):
+    return render(request, "inventario/ubicaciones.html", {})
+
+
+class UbicacionesView(APIView):
+    def get(self, request):
+        bodega_id = request.GET.get("bodega")
+        ubicaciones_qs = (
+            Ubicacion.objects.select_related("bodega", "padre")
+            .prefetch_related("hijos")
+            .order_by("bodega__nombre", "nivel", "numero", "nombre")
+        )
+        if bodega_id:
+            ubicaciones_qs = ubicaciones_qs.filter(bodega_id=bodega_id)
+
+        ubicaciones_lista = list(ubicaciones_qs)
+        hijos_map = {}
+        for ubicacion in ubicaciones_lista:
+            hijos_map.setdefault(ubicacion.padre_id, []).append(ubicacion)
+
+        for ubicacion in ubicaciones_lista:
+            hijos = hijos_map.get(ubicacion.id, [])
+            hijos.sort(key=lambda item: (item.nivel, item.nombre.lower()))
+            ubicacion._prefetched_hijos = hijos  # noqa: SLF001
+
+        raices = hijos_map.get(None, [])
+        raices.sort(key=lambda item: (item.nivel, item.nombre.lower()))
+
+        serializer = UbicacionTreeSerializer(
+            raices,
+            many=True,
+            context={"request": request},
+        )
+
+        bodegas_data = [
+            {"id": bodega.id, "nombre": bodega.nombre}
+            for bodega in Bodega.objects.order_by("nombre")
+        ]
+
+        tipos_data = [
+            {
+                "value": valor,
+                "label": etiqueta,
+                "nivel": Ubicacion.NIVEL_MAP.get(valor),
+                "padres_validos": [
+                    padre for padre in (Ubicacion.PADRES_VALIDOS.get(valor) or [])
+                    if padre is not None
+                ],
+                "permite_raiz": None in (Ubicacion.PADRES_VALIDOS.get(valor) or []),
+            }
+            for valor, etiqueta in Ubicacion.Tipo.choices
+        ]
+
+        return Response(
+            {
+                "ubicaciones": serializer.data,
+                "bodegas": bodegas_data,
+                "tipos": tipos_data,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+        data = request.data.copy()
+        if data.get("padre") in ("", "null", None):
+            data["padre"] = None
+
+        serializer = UbicacionCreateSerializer(data=data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        ubicacion = serializer.save()
+        ubicacion.refresh_from_db()
+        nodo = UbicacionTreeSerializer(
+            ubicacion,
+            context={"request": request},
+        ).data
+
+        return Response(nodo, status=status.HTTP_201_CREATED)

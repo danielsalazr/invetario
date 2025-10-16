@@ -1,0 +1,496 @@
+{% extends "base.html" %}
+{% load static %}
+{% block container %}
+
+<style>
+  :root {
+    --accent: #1d4ed8;
+    --accent-soft: #dbeafe;
+    --surface: #f8fafc;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --success: #15803d;
+    --danger: #dc2626;
+  }
+
+  body {
+    background: var(--surface);
+    font-family: "Segoe UI", Roboto, sans-serif;
+    color: var(--text);
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 380px 1fr 360px;
+    gap: 1.5rem;
+    padding: 2rem 3vw 3rem;
+    min-height: 100vh;
+    box-sizing: border-box;
+  }
+
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid var(--border);
+    box-shadow: 0 10px 30px -25px rgba(15, 23, 42, 0.6);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card header {
+    padding: 1.25rem 1.5rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .card header h2 {
+    margin: 0;
+    font-weight: 600;
+    font-size: 1.2rem;
+  }
+
+  .card header p {
+    margin: 0.35rem 0 0;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  .tree-container {
+    height: 100%;
+  }
+
+  .tree-scroll {
+    padding: 1rem 1.25rem;
+    overflow-y: auto;
+  }
+
+  .tree-search {
+    display: flex;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem 0;
+  }
+
+  .tree-search input {
+    flex: 1;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    padding: 0.6rem 1rem;
+    font-size: 0.95rem;
+    background: #fff;
+  }
+
+  .tree-search button {
+    border: none;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 999px;
+    padding: 0.6rem 1.3rem;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .tree {
+    list-style: none;
+    margin: 0;
+    padding-left: 0;
+  }
+
+  .tree-item {
+    margin: 0.15rem 0;
+  }
+
+  .tree-node {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto;
+    gap: 0.65rem;
+    align-items: center;
+    padding: 0.45rem 0.65rem;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .tree-node[data-selected="true"] {
+    background: var(--accent-soft);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+
+  .tree-node:hover {
+    background: rgba(226, 232, 240, 0.6);
+  }
+
+  .tree-node strong {
+    font-size: 0.95rem;
+  }
+
+  .tree-node-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.18rem;
+  }
+
+  .tree-node-meta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+  }
+
+  .tree-toggle {
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.85rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+
+  .tree-toggle:hover {
+    background: var(--surface);
+    border-color: var(--accent);
+  }
+
+  .tree-toggle-spacer {
+    width: 28px;
+    height: 28px;
+    display: inline-block;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--accent);
+    background: rgba(37, 99, 235, 0.12);
+  }
+
+  .tree-bodega {
+    margin-bottom: 1rem;
+  }
+
+  .tree-bodega-header {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.65rem;
+    align-items: center;
+    padding: 0.6rem 0.75rem;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(226, 232, 240, 0.45);
+  }
+
+  .tree-bodega-title strong {
+    font-size: 1rem;
+  }
+
+  .tree-bodega-estantes {
+    list-style: none;
+    margin: 0.4rem 0 0 1.4rem;
+    padding-left: 0.9rem;
+    border-left: 1px solid var(--border);
+  }
+
+  .tree-actions {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0 1.25rem 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .tree-action-btn {
+    border: 1px solid var(--border);
+    background: #fff;
+    border-radius: 999px;
+    padding: 0.5rem 1.2rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text);
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+
+  .tree-action-btn:hover:not([disabled]) {
+    background: var(--surface);
+    border-color: var(--accent);
+  }
+
+  .tree-action-btn[disabled] {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .tree-children {
+    list-style: none;
+    margin: 0.35rem 0 0 1.5rem;
+    padding-left: 0.8rem;
+    border-left: 1px dashed var(--border);
+  }
+
+  .tree-empty {
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--text-muted);
+  }
+
+  .form-wrapper {
+    padding: 1.25rem 1.5rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  .form-group label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.65rem 0.75rem;
+    font-size: 0.95rem;
+    font-family: inherit;
+  }
+
+  .form-group textarea {
+    resize: vertical;
+    min-height: 70px;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .btn-primary {
+    border: none;
+    border-radius: 999px;
+    padding: 0.65rem 1.6rem;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .btn-secondary {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.6rem 1.4rem;
+    background: #fff;
+    color: var(--text);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .readonly-panel {
+    padding: 1.25rem 1.5rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+  }
+
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    font-size: 0.9rem;
+  }
+
+  .detail-row span:last-child {
+    color: var(--text-muted);
+  }
+
+  .detail-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 2rem 1rem;
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.18);
+    color: var(--accent);
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.35rem 0.75rem;
+  }
+
+  @media (max-width: 1200px) {
+    .layout {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<section class="layout">
+  <aside class="card tree-container">
+    <header>
+      <h2>Mapa de ubicaciones</h2>
+      <p>Explora la jerarquía completa y selecciona un nodo para relacionarlo como padre.</p>
+    </header>
+    <div class="tree-search">
+      <input
+        type="search"
+        id="buscarUbicacion"
+        placeholder="Buscar por nombre o tipo..."
+        autocomplete="off"
+      />
+      <button type="button" id="limpiarBusquedaUbicacion">Limpiar</button>
+    </div>
+    <div class="tree-actions">
+      <button
+        type="button"
+        class="tree-action-btn"
+        id="colapsarTodoUbicaciones"
+      >
+        Colapsar todo
+      </button>
+      <button
+        type="button"
+        class="tree-action-btn"
+        id="restaurarVistaUbicaciones"
+        disabled
+      >
+        Deshacer colapso
+      </button>
+    </div>
+    <div class="tree-scroll" id="treeWrapper">
+      <div class="tree-empty" id="treeEmptyState">
+        No hay ubicaciones registradas. Crea la primera desde el formulario.
+      </div>
+      <ul class="tree" id="arbolUbicaciones"></ul>
+    </div>
+  </aside>
+
+  <section class="card">
+    <header>
+      <h2>Crear nueva ubicación</h2>
+      <p>Define el tipo, asigna un padre válido y registra la ubicación dentro de la bodega correspondiente.</p>
+    </header>
+    <form id="formUbicacion" class="form-wrapper" novalidate>
+      {% csrf_token %}
+
+      <div class="form-group">
+        <label for="bodega">Bodega *</label>
+        <select name="bodega" id="bodega" required>
+          <option value="">Selecciona una bodega</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="tipo">Tipo de ubicación *</label>
+        <select name="tipo" id="tipo" required>
+          <option value="">Selecciona un tipo</option>
+        </select>
+        <small id="tipoHint" style="color: var(--text-muted); font-size: 0.8rem;"></small>
+      </div>
+
+      <div class="form-group">
+        <label for="padreNombre">Ubicación padre</label>
+        <input
+          type="text"
+          id="padreNombre"
+          placeholder="Selecciona un nodo del árbol"
+          readonly
+        />
+        <input type="hidden" name="padre" id="padre" />
+        <small id="padreHint" style="color: var(--text-muted); font-size: 0.8rem;">
+          Los padres disponibles dependen del tipo seleccionado.
+        </small>
+      </div>
+
+      <div class="form-group">
+        <label for="nombre">Nombre *</label>
+        <input
+          type="text"
+          name="nombre"
+          id="nombre"
+          maxlength="60"
+          required
+          placeholder="Ej: Estante A"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="nomenclatura">Nomenclatura</label>
+        <input
+          type="text"
+          name="nomenclatura"
+          id="nomenclatura"
+          maxlength="50"
+          placeholder="Código interno opcional"
+        />
+      </div>
+
+      <div class="form-group">
+        <label for="descripcion">Descripción</label>
+        <textarea
+          name="descripcion"
+          id="descripcion"
+          maxlength="120"
+          placeholder="Notas adicionales"
+        ></textarea>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-primary" id="guardarUbicacion">
+          Guardar ubicación
+        </button>
+        <button type="button" class="btn-secondary" id="limpiarFormulario">
+          Limpiar
+        </button>
+      </div>
+
+      <p style="margin:0; color:var(--text-muted); font-size:0.8rem;">
+        * Campos obligatorios. Los tipos definen la profundidad máxima (Estante → Panel → División → Contenedor).
+      </p>
+    </form>
+  </section>
+
+  <aside class="card">
+    <header>
+      <h2>Detalle de ubicación</h2>
+      <p>Consulta los datos completos de la ubicación seleccionada.</p>
+    </header>
+    <div class="readonly-panel" id="detalleUbicacion">
+      <div class="detail-empty">
+        Selecciona una ubicación del árbol para ver sus detalles.
+      </div>
+    </div>
+  </aside>
+</section>
+
+<script>
+  window.ubicacionesConfig = {
+    endpoints: {
+      ubicaciones: "{% url 'ubicaciones_api' %}",
+    },
+  };
+</script>
+
+<script src="{% static 'js/sweetAlert.js' %}"></script>
+<script src="{% static 'js/ubicaciones.js' %}"></script>
+
+{% endblock container %}
