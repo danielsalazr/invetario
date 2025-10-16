@@ -264,61 +264,84 @@
     const padre = nodo.padre ? state.mapa.get(nodo.padre) : null;
     const tipoSeleccionado = obtenerTipo(tipoSelect.value);
     const puedeSerPadre = esPadreValido(tipoSeleccionado, nodo);
+    const nombreEscapado = escaparHtml(nodo.nombre);
+    const numero = nodo.numero != null ? nodo.numero : "—";
+    const tipoEscapado = escaparHtml(nodo.tipo_display);
+    const nivel = nodo.nivel != null ? nodo.nivel : "—";
+    const bodegaNombre = nodo.bodega_nombre || nodo.bodega || "";
+    const bodegaEscapada = bodegaNombre ? escaparHtml(bodegaNombre) : "—";
+    const rutaEscapada = nodo.ruta ? escaparHtml(nodo.ruta) : "—";
+    const nomenclaturaEscapada =
+      nodo.nomenclatura && nodo.nomenclatura !== ""
+        ? escaparHtml(nodo.nomenclatura)
+        : "—";
+    const padreEscapado = padre ? escaparHtml(padre.nombre) : "—";
+    const descripcionEscapada =
+      nodo.descripcion && String(nodo.descripcion).trim().length
+        ? escaparHtml(nodo.descripcion).replace(/\r?\n/g, "<br />")
+        : "—";
 
     detallePanel.innerHTML = `
-      <div>
+      <div class="detail-section">
         <div class="detail-row">
           <span>Nombre</span>
-          <span><strong>${nodo.nombre}</strong></span>
+          <span><strong>${nombreEscapado}</strong></span>
         </div>
         <div class="detail-row">
           <span>Número</span>
-          <span>${nodo.numero != null ? nodo.numero : "—"}</span>
+          <span>${numero}</span>
         </div>
         <div class="detail-row">
           <span>Tipo</span>
-          <span>${nodo.tipo_display}</span>
+          <span>${tipoEscapado}</span>
         </div>
         <div class="detail-row">
           <span>Nivel</span>
-          <span>${nodo.nivel}</span>
+          <span>${nivel}</span>
         </div>
         <div class="detail-row">
           <span>Bodega</span>
-          <span>${nodo.bodega_nombre || nodo.bodega}</span>
+          <span>${bodegaEscapada}</span>
         </div>
         <div class="detail-row">
           <span>Ruta</span>
-          <span>${nodo.ruta}</span>
+          <span>${rutaEscapada}</span>
         </div>
         <div class="detail-row">
           <span>Nomenclatura</span>
-          <span>${nodo.nomenclatura || "—"}</span>
+          <span>${nomenclaturaEscapada}</span>
         </div>
         <div class="detail-row">
           <span>Padre</span>
-          <span>${padre ? padre.nombre : "—"}</span>
+          <span>${padreEscapado}</span>
         </div>
         <div class="detail-row">
           <span>Descripción</span>
-          <span>${nodo.descripcion || "—"}</span>
+          <span>${descripcionEscapada}</span>
         </div>
         <div class="detail-row">
           <span>Hijos</span>
           <span>${hijos.length}</span>
         </div>
+        <div class="detail-actions">
+          ${
+            puedeSerPadre
+              ? `<button type="button" class="btn-secondary" id="usarComoPadre">
+                   Usar como padre
+                 </button>`
+              : ""
+          }
+          <button type="button" class="btn-secondary" id="limpiarPadre">
+            Quitar padre
+          </button>
+        </div>
       </div>
-      <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
-        ${
-          puedeSerPadre
-            ? `<button type="button" class="btn-secondary" id="usarComoPadre">
-                 Usar como padre
-               </button>`
-            : ""
-        }
-        <button type="button" class="btn-secondary" id="limpiarPadre">
-          Quitar padre
-        </button>
+      <div class="physical-wrapper">
+        <div class="physical-header">
+          <span class="physical-title">Vista física</span>
+          <span>Estante &gt; Panel &gt; División &gt; Contenedor</span>
+        </div>
+        <div class="physical-canvas" id="vistaFisica"></div>
       </div>
     `;
 
@@ -333,9 +356,230 @@
     if (limpiarPadreBtn) {
       limpiarPadreBtn.addEventListener("click", () => limpiarPadre());
     }
+
+    renderVistaFisica(nodo);
   }
 
 
+
+  function escaparHtml(valor) {
+    if (valor === null || valor === undefined) {
+      return "";
+    }
+    return String(valor)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function ordenarUbicaciones(a, b) {
+    const numeroA = Number.parseInt(a?.numero, 10);
+    const numeroB = Number.parseInt(b?.numero, 10);
+    const valorA = Number.isNaN(numeroA) ? Number.MAX_SAFE_INTEGER : numeroA;
+    const valorB = Number.isNaN(numeroB) ? Number.MAX_SAFE_INTEGER : numeroB;
+    if (valorA !== valorB) {
+      return valorA - valorB;
+    }
+    const nombreA = (a?.nombre || "").toLowerCase();
+    const nombreB = (b?.nombre || "").toLowerCase();
+    return nombreA.localeCompare(nombreB);
+  }
+
+  function obtenerRutaIds(nodo) {
+    const ids = new Set();
+    let actual = nodo;
+    while (actual) {
+      ids.add(normalizarId(actual.id));
+      if (!actual.padre) {
+        break;
+      }
+      actual = state.mapa.get(normalizarId(actual.padre));
+    }
+    return ids;
+  }
+
+  function obtenerEstanteBase(nodo) {
+    let actual = nodo;
+    while (actual) {
+      if (actual.tipo === "ESTANTE") {
+        return actual;
+      }
+      if (!actual.padre) {
+        break;
+      }
+      actual = state.mapa.get(normalizarId(actual.padre));
+    }
+    return actual && actual.tipo === "ESTANTE" ? actual : null;
+  }
+
+  function construirContenedoresHtml(contenedores, rutaIds, seleccionadoId) {
+    if (!contenedores || !contenedores.length) {
+      return `<div class="physical-empty">Sin contenedores registrados.</div>`;
+    }
+    const ordenados = contenedores.slice().sort(ordenarUbicaciones);
+    const html = ordenados
+      .map((contenedor) => {
+        const contId = normalizarId(contenedor.id);
+        const esSeleccionado = contId === seleccionadoId;
+        const enRuta = rutaIds.has(contId);
+        const codigo =
+          contenedor.nomenclatura && contenedor.nomenclatura !== ""
+            ? contenedor.nomenclatura
+            : contenedor.numero != null
+              ? contenedor.numero
+              : "";
+        return `
+          <div class="physical-container" data-selected="${esSeleccionado}" data-path="${enRuta}">
+            <span>${escaparHtml(contenedor.nombre || "Contenedor")}</span>
+            <span>${escaparHtml(codigo)}</span>
+          </div>
+        `;
+      })
+      .join("");
+    return `<div class="physical-containers">${html}</div>`;
+  }
+
+  function renderVistaFisica(nodo) {
+    const contenedor = detallePanel?.querySelector?.("#vistaFisica");
+    if (!contenedor) return;
+
+    if (!nodo) {
+      contenedor.innerHTML = `
+        <div class="physical-empty">
+          Selecciona una ubicación para visualizar su estructura física.
+        </div>
+      `;
+      return;
+    }
+
+    const estante = obtenerEstanteBase(nodo);
+    if (!estante) {
+      contenedor.innerHTML = `
+        <div class="physical-empty">
+          Esta ubicación no está asociada a un estante configurado.
+        </div>
+      `;
+      return;
+    }
+
+    const rutaIds = obtenerRutaIds(nodo);
+    const seleccionadoId = normalizarId(nodo.id);
+    const panelesFuente = Array.isArray(estante.hijos)
+      ? estante.hijos.filter((hijo) => hijo.tipo === "PANEL")
+      : [];
+    const paneles = panelesFuente.slice().sort(ordenarUbicaciones);
+    const contenedoresEstante = Array.isArray(estante.hijos)
+      ? estante.hijos.filter((hijo) => hijo.tipo === "CONTENEDOR")
+      : [];
+
+    let totalDivisiones = 0;
+    let totalContenedores = contenedoresEstante.length;
+
+    const panelesOrdenados = paneles.slice().sort(ordenarUbicaciones).reverse();
+    const panelesHtml = panelesOrdenados
+      .map((panel) => {
+        const panelId = normalizarId(panel.id);
+        const esPanelSeleccionado = panelId === seleccionadoId;
+        const panelEnRuta = rutaIds.has(panelId);
+        const divisiones = Array.isArray(panel.hijos)
+          ? panel.hijos.filter((hijo) => hijo.tipo === "DIVISION")
+          : [];
+        const contenedoresPanel = Array.isArray(panel.hijos)
+          ? panel.hijos.filter((hijo) => hijo.tipo === "CONTENEDOR")
+          : [];
+        const divisionesOrdenadas = divisiones.slice().sort(ordenarUbicaciones);
+        let divisionesHtml = "";
+        totalDivisiones += divisionesOrdenadas.length;
+
+        if (divisionesOrdenadas.length) {
+          divisionesHtml = divisionesOrdenadas
+            .map((division) => {
+              const divisionId = normalizarId(division.id);
+              const divisionSeleccionada = divisionId === seleccionadoId;
+              const divisionEnRuta = rutaIds.has(divisionId);
+              const contenedoresDivision = Array.isArray(division.hijos)
+                ? division.hijos.filter((hijo) => hijo.tipo === "CONTENEDOR")
+                : [];
+              totalContenedores += contenedoresDivision.length;
+              return `
+                <div class="physical-division" data-selected="${divisionSeleccionada}" data-path="${divisionEnRuta}">
+                  <div class="physical-division-title">
+                    <span>${escaparHtml(division.nombre)}</span>
+                    <span>${escaparHtml(division.nomenclatura || division.numero || "")}</span>
+                  </div>
+                  ${construirContenedoresHtml(contenedoresDivision, rutaIds, seleccionadoId)}
+                </div>
+              `;
+            })
+            .join("");
+        }
+
+        totalContenedores += contenedoresPanel.length;
+
+        let cuerpoPanel = "";
+        if (divisionesOrdenadas.length) {
+          cuerpoPanel = `<div class="physical-divisions">${divisionesHtml}</div>`;
+        } else if (contenedoresPanel.length) {
+          cuerpoPanel = construirContenedoresHtml(
+            contenedoresPanel,
+            rutaIds,
+            seleccionadoId,
+          );
+        } else {
+          cuerpoPanel = `<div class="physical-empty">Sin divisiones ni contenedores registrados.</div>`;
+        }
+
+        return `
+          <div class="physical-panel" data-selected="${esPanelSeleccionado}" data-path="${panelEnRuta}">
+            <div class="physical-panel-title">
+              <span>${escaparHtml(panel.nombre)}</span>
+              <span>${escaparHtml(panel.nomenclatura || panel.numero || "")}</span>
+            </div>
+            ${cuerpoPanel}
+          </div>
+        `;
+      })
+      .join("");
+
+    const totalPaneles = paneles.length;
+    const resumen = `
+      <div class="physical-summary">
+        <strong>${escaparHtml(estante.nombre)}</strong>
+        <span>
+          ${totalPaneles} ${totalPaneles === 1 ? "panel" : "paneles"}
+          &middot;
+          ${totalDivisiones} ${totalDivisiones === 1 ? "división" : "divisiones"}
+          &middot;
+          ${totalContenedores} ${totalContenedores === 1 ? "contenedor" : "contenedores"}
+        </span>
+      </div>
+    `;
+
+    const directSection = contenedoresEstante.length
+      ? `<div class="physical-direct">
+           <div class="physical-division-title">
+             <span>Contenedores en el estante</span>
+             <span>${escaparHtml(estante.nomenclatura || estante.numero || "")}</span>
+           </div>
+           ${construirContenedoresHtml(contenedoresEstante, rutaIds, seleccionadoId)}
+         </div>`
+      : "";
+
+    let contenidoPrincipal = "";
+    if (paneles.length) {
+      contenidoPrincipal = `<div class="physical-shelf">${panelesHtml}</div>${directSection}`;
+    } else if (directSection) {
+      contenidoPrincipal = directSection;
+    } else {
+      contenidoPrincipal = `<div class="physical-empty">
+        El estante aún no tiene paneles ni contenedores asignados.
+      </div>`;
+    }
+
+    contenedor.innerHTML = resumen + contenidoPrincipal;
+  }
 
   function obtenerNombreBodega(bodegaId, fallbackNombre = "") {
     if (bodegaId === null || bodegaId === undefined) {
