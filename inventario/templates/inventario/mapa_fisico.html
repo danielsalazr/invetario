@@ -1,4 +1,4 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% load static %}
 {% block container %}
 
@@ -12,6 +12,7 @@
     --text-muted: #64748b;
     --panel: #22d3ee;
     --panel-soft: rgba(34, 211, 238, 0.18);
+    --panel-height: 90px;
     --division: #a855f7;
     --division-soft: rgba(168, 85, 247, 0.18);
     --contenedor: #f97316;
@@ -74,6 +75,12 @@
     box-shadow: 0 12px 30px -28px rgba(15, 23, 42, 0.7);
   }
 
+  .map-select-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
   .map-controls label {
     font-weight: 600;
     color: var(--text);
@@ -85,6 +92,44 @@
     border: 1px solid var(--border);
     padding: 0.6rem 0.8rem;
     font-size: 0.95rem;
+  }
+
+  .map-view-toggle {
+    display: inline-flex;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: #fff;
+    overflow: hidden;
+    margin-left: auto;
+  }
+
+  .map-view-button {
+    border: none;
+    background: transparent;
+    padding: 0.55rem 1.1rem;
+    font-weight: 600;
+    font-size: 0.86rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+
+  .map-view-button + .map-view-button {
+    border-left: 1px solid var(--border);
+  }
+
+  .map-view-button.is-active {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 8px 20px -14px rgba(29, 78, 216, 0.85);
+  }
+
+  .map-view-button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
 
   .map-legend-item {
@@ -227,8 +272,97 @@
     padding: 1.25rem 1.5rem;
     display: flex;
     flex-direction: column;
+    height: 100%;
     gap: 1.2rem;
     box-shadow: 0 18px 40px -32px rgba(15, 23, 42, 0.55);
+  }
+
+  .estante-card--general {
+    gap: 0.95rem;
+  }
+
+  .estante-general-body {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.2rem;
+    padding: 1rem 1.1rem;
+    border-radius: 14px;
+    border: 1px dashed rgba(148, 163, 184, 0.45);
+    background: rgba(226, 232, 240, 0.45);
+  }
+
+  .estante-general-icon {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    border-radius: 18px;
+    background: linear-gradient(
+      180deg,
+      rgba(59, 130, 246, 0.18) 0%,
+      rgba(37, 99, 235, 0.28) 100%
+    );
+    border: 1px solid rgba(37, 99, 235, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .estante-general-icon::before,
+  .estante-general-icon::after {
+    content: "";
+    position: absolute;
+    width: 68%;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.65);
+  }
+
+  .estante-general-icon::before {
+    top: 18px;
+  }
+
+  .estante-general-icon::after {
+    bottom: 18px;
+  }
+
+  .estante-general-icon span {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 6px;
+    height: 70%;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.6);
+  }
+
+  .estante-general-stats {
+    display: flex;
+    gap: 1.4rem;
+    flex-wrap: wrap;
+  }
+
+  .estante-general-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 72px;
+  }
+
+  .estante-general-stat-value {
+    font-weight: 700;
+    font-size: 1.06rem;
+    color: var(--accent);
+  }
+
+  .estante-general-stat-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
   }
 
   .estante-header {
@@ -267,6 +401,9 @@
     );
     border-radius: 18px;
     border: 1px solid rgba(148, 163, 184, 0.45);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
     min-height: 180px;
   }
 
@@ -362,7 +499,9 @@
     position: relative;
     display: flex;
     flex-direction: column-reverse;
+    justify-content: flex-start;
     gap: 1.9rem;
+    flex: 1;
     z-index: 1;
   }
 
@@ -374,6 +513,10 @@
     padding: 0 0.2rem;
   }
 
+  .shelf-level--panel {
+    min-height: var(--panel-height);
+  }
+
   .shelf-board {
     position: relative;
     background: linear-gradient(145deg, #f8d9a8 0%, #deb176 100%);
@@ -382,6 +525,13 @@
     padding: 1rem 1.15rem;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55),
       0 12px 20px -14px rgba(15, 23, 42, 0.55);
+  }
+
+  .shelf-board--panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    flex: 1;
   }
 
   .shelf-level-header {
@@ -446,53 +596,6 @@
     text-transform: uppercase;
   }
 
-  .shelf-panel-frame {
-    position: relative;
-    padding: 1.05rem 1.2rem;
-    border-radius: 12px;
-    background: rgba(226, 232, 240, 0.55);
-    border: 1px solid rgba(96, 165, 250, 0.55);
-    box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.25);
-  }
-
-  .shelf-panel-frame::before,
-  .shelf-panel-frame::after {
-    content: "";
-    position: absolute;
-    top: 0.5rem;
-    bottom: 0.5rem;
-    width: 10px;
-    border-radius: 3px;
-    background: linear-gradient(180deg, #1e3a8a 0%, #172554 100%);
-    opacity: 0.85;
-  }
-
-  .shelf-panel-frame::before {
-    left: 0.45rem;
-  }
-
-  .shelf-panel-frame::after {
-    right: 0.45rem;
-  }
-
-  .shelf-panel-cross {
-    position: absolute;
-    left: 0.45rem;
-    right: 0.45rem;
-    height: 6px;
-    background: linear-gradient(180deg, #172554 0%, #0f172a 100%);
-    border-radius: 3px;
-    opacity: 0.85;
-  }
-
-  .shelf-panel-cross-top {
-    top: 0.25rem;
-  }
-
-  .shelf-panel-cross-bottom {
-    bottom: 0.25rem;
-  }
-
   .shelf-panel-body {
     position: relative;
     background: rgba(191, 219, 254, 0.6);
@@ -501,6 +604,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.65rem;
+    flex: 1;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
   }
 
@@ -574,15 +678,39 @@
       flex-direction: column;
       align-items: flex-start;
     }
+    .map-select-group {
+      width: 100%;
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.5rem;
+    }
+    .map-select-group select {
+      width: 100%;
+    }
+    .map-view-toggle {
+      width: 100%;
+    }
+    .map-view-button {
+      flex: 1;
+      text-align: center;
+    }
+    .estante-general-body {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 1rem;
+    }
+    .estante-general-stats {
+      justify-content: space-between;
+    }
   }
 </style>
 
 <section class="map-layout">
   <header class="map-header">
-    <h1>Mapa fÃ­sico de bodegas</h1>
+    <h1>Mapa físico de bodegas</h1>
     <p>
-      Visualiza cada bodega con sus estanterÃ­as, paneles, divisiones y contenedores.
-      El panel con nÃºmero 1 corresponde a la base del estante; los paneles superiores se muestran encima.
+      Visualiza cada bodega con sus estanterías, paneles, divisiones y contenedores.
+      El panel con número 1 corresponde a la base del estante; los paneles superiores se muestran encima.
     </p>
     <div class="map-legend">
       <div class="map-legend-item">
@@ -599,17 +727,37 @@
       </div>
     </div>
     <div class="map-controls">
-      <label for="selectorBodega">Selecciona una bodega:</label>
-      <select id="selectorBodega">
-        <option value="">Selecciona una bodegaâ€¦</option>
-      </select>
+      <div class="map-select-group">
+        <label for="selectorBodega">Selecciona una bodega:</label>
+        <select id="selectorBodega">
+          <option value="">Selecciona una bodega...</option>
+        </select>
+      </div>
+      <div class="map-view-toggle" role="group" aria-label="Selecciona el tipo de vista">
+        <button
+          type="button"
+          class="map-view-button is-active"
+          data-view="detallada"
+          aria-pressed="true"
+        >
+          Vista detallada
+        </button>
+        <button
+          type="button"
+          class="map-view-button"
+          data-view="general"
+          aria-pressed="false"
+        >
+          Mapa general
+        </button>
+      </div>
     </div>
     <div class="map-summary" id="mapaResumen" style="display:none;"></div>
   </header>
 
   <div class="estantes-wrapper" id="mapaFisico">
     <div class="map-empty" id="mapaEmptyState">
-      Selecciona una bodega para visualizar sus estanterÃ­as.
+      Selecciona una bodega para visualizar sus estanterías.
     </div>
   </div>
 </section>
@@ -625,5 +773,4 @@
 <script src="{% static 'js/mapa_fisico.js' %}"></script>
 
 {% endblock container %}
-
 

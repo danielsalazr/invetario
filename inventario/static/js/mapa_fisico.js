@@ -1,4 +1,4 @@
-﻿(() => {
+(() => {
   const config = window.ubicacionesConfig || {};
   const ubicacionesEndpoint =
     config.endpoints?.ubicaciones || "/inventario/ubicaciones/api/";
@@ -7,6 +7,9 @@
   const emptyState = document.querySelector("#mapaEmptyState");
   const selectorBodega = document.querySelector("#selectorBodega");
   const mapaResumen = document.querySelector("#mapaResumen");
+  const viewButtons = Array.from(
+    document.querySelectorAll(".map-view-button"),
+  );
 
   if (!mapaWrapper) {
     return;
@@ -16,9 +19,20 @@
     bodegasCatalogo: new Map(),
     bodegasAgrupadas: new Map(),
     seleccionada: null,
+    viewMode: "detallada",
   };
 
   const BULLET = " \u00B7 ";
+
+  function actualizarViewButtons() {
+    if (!viewButtons.length) return;
+    viewButtons.forEach((button) => {
+      const objetivo = button.dataset.view || "";
+      const activo = objetivo === state.viewMode;
+      button.classList.toggle("is-active", activo);
+      button.setAttribute("aria-pressed", activo ? "true" : "false");
+    });
+  }
 
   function normalizarId(valor) {
     if (valor === null || valor === undefined) {
@@ -182,9 +196,15 @@
   }) {
     const level = document.createElement("div");
     level.className = "shelf-level";
+    if (tipo) {
+      level.classList.add(`shelf-level--${String(tipo).toLowerCase()}`);
+    }
 
     const board = document.createElement("div");
     board.className = "shelf-board";
+    if (tipo) {
+      board.classList.add(`shelf-board--${String(tipo).toLowerCase()}`);
+    }
 
     if (nombre || codigo) {
       const header = document.createElement("div");
@@ -226,13 +246,6 @@
     let contenidoNodo = body;
 
     if (tipo === "panel") {
-      const frame = document.createElement("div");
-      frame.className = "shelf-panel-frame";
-
-      const crossTop = document.createElement("div");
-      crossTop.className = "shelf-panel-cross shelf-panel-cross-top";
-      const crossBottom = document.createElement("div");
-      crossBottom.className = "shelf-panel-cross shelf-panel-cross-bottom";
       const panelBody = document.createElement("div");
       panelBody.className = "shelf-panel-body";
 
@@ -245,10 +258,7 @@
         panelBody.textContent = "Sin contenedores registrados.";
       }
 
-      frame.appendChild(crossTop);
-      frame.appendChild(crossBottom);
-      frame.appendChild(panelBody);
-      contenidoNodo = frame;
+      contenidoNodo = panelBody;
     } else {
       if (!body.childElementCount && !body.textContent.trim()) {
         body.classList.add("shelf-level-body--empty");
@@ -350,10 +360,7 @@ function construirNivelBase(estante, contenedores) {
     };
   }
 
-  function construirEstante(estante) {
-    const card = document.createElement("div");
-    card.className = "estante-card";
-
+  function crearEncabezadoEstante(estante, datos) {
     const header = document.createElement("div");
     header.className = "estante-header";
 
@@ -371,7 +378,6 @@ function construirNivelBase(estante, contenedores) {
 
     const resumen = document.createElement("div");
     resumen.className = "estante-summary";
-    const datos = calcularResumenEstante(estante);
     resumen.textContent = `${datos.panelesCantidad} ${
       datos.panelesCantidad === 1 ? "panel" : "paneles"
     }${BULLET}${datos.divisionesCantidad} ${
@@ -382,6 +388,33 @@ function construirNivelBase(estante, contenedores) {
 
     header.appendChild(titulo);
     header.appendChild(resumen);
+    return header;
+  }
+
+  function crearEstanteGeneralStat(valor, etiqueta) {
+    const stat = document.createElement("div");
+    stat.className = "estante-general-stat";
+
+    const value = document.createElement("span");
+    value.className = "estante-general-stat-value";
+    value.textContent = String(valor);
+
+    const label = document.createElement("span");
+    label.className = "estante-general-stat-label";
+    label.textContent = etiqueta;
+
+    stat.appendChild(value);
+    stat.appendChild(label);
+    return stat;
+  }
+
+  function construirEstante(estante) {
+    const card = document.createElement("div");
+    card.className = "estante-card";
+
+    const datos = calcularResumenEstante(estante);
+
+    const header = crearEncabezadoEstante(estante, datos);
     card.appendChild(header);
 
     const frame = document.createElement("div");
@@ -439,6 +472,50 @@ function construirNivelBase(estante, contenedores) {
     return card;
   }
 
+  function construirEstanteGeneral(estante) {
+    const card = document.createElement("div");
+    card.className = "estante-card estante-card--general";
+
+    const datos = calcularResumenEstante(estante);
+    const header = crearEncabezadoEstante(estante, datos);
+    card.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "estante-general-body";
+
+    const icon = document.createElement("div");
+    icon.className = "estante-general-icon";
+    icon.appendChild(document.createElement("span"));
+
+    const statsWrap = document.createElement("div");
+    statsWrap.className = "estante-general-stats";
+
+    statsWrap.appendChild(
+      crearEstanteGeneralStat(
+        datos.panelesCantidad,
+        datos.panelesCantidad === 1 ? "Panel" : "Paneles",
+      ),
+    );
+    statsWrap.appendChild(
+      crearEstanteGeneralStat(
+        datos.divisionesCantidad,
+        datos.divisionesCantidad === 1 ? "Division" : "Divisiones",
+      ),
+    );
+    statsWrap.appendChild(
+      crearEstanteGeneralStat(
+        datos.contenedoresCantidad,
+        datos.contenedoresCantidad === 1 ? "Contenedor" : "Contenedores",
+      ),
+    );
+
+    body.appendChild(icon);
+    body.appendChild(statsWrap);
+    card.appendChild(body);
+
+    return card;
+  }
+
   function dividirEnFilas(lista, tamano = 10) {
     const filas = [];
     for (let i = 0; i < lista.length; i += tamano) {
@@ -447,7 +524,7 @@ function construirNivelBase(estante, contenedores) {
     return filas;
   }
 
-  function construirBodegaVista(bodega) {
+  function construirBodegaVista(bodega, viewMode = "detallada") {
     const card = document.createElement("article");
     card.className = "bodega-card";
 
@@ -477,13 +554,16 @@ function construirNivelBase(estante, contenedores) {
     } else {
       const grid = document.createElement("div");
       grid.className = "estante-grid";
+      grid.dataset.view = viewMode;
+      const construirEstantePorVista =
+        viewMode === "general" ? construirEstanteGeneral : construirEstante;
       const filas = dividirEnFilas(estantesOrdenados, 10);
       filas.forEach((fila) => {
         const row = document.createElement("div");
         row.className = "estante-row";
         row.dataset.columns = String(Math.min(fila.length, 10));
         fila.forEach((estante) => {
-          row.appendChild(construirEstante(estante));
+          row.appendChild(construirEstantePorVista(estante));
         });
         grid.appendChild(row);
       });
@@ -531,6 +611,7 @@ function construirNivelBase(estante, contenedores) {
 
   function mostrarEmptyState(mensaje) {
     mapaWrapper.innerHTML = "";
+    mapaWrapper.dataset.view = state.viewMode;
     if (emptyState) {
       emptyState.textContent = mensaje;
       emptyState.style.display = "block";
@@ -553,14 +634,15 @@ function construirNivelBase(estante, contenedores) {
     if (emptyState) {
       emptyState.style.display = "none";
     }
-    mapaWrapper.appendChild(construirBodegaVista(bodega));
+    mapaWrapper.dataset.view = state.viewMode;
+    mapaWrapper.appendChild(construirBodegaVista(bodega, state.viewMode));
     actualizarResumen(bodega);
   }
 
   function poblarSelector(bodegasLista) {
     if (!selectorBodega) return;
     selectorBodega.innerHTML =
-      '<option value="">Selecciona una bodegaâ€¦</option>';
+      '<option value="">Selecciona una bodega...</option>';
     bodegasLista.forEach((bodega) => {
       const option = document.createElement("option");
       option.value = bodega.id ?? "";
@@ -574,6 +656,20 @@ function construirNivelBase(estante, contenedores) {
       const valor = event.target.value;
       state.seleccionada = valor ? normalizarId(valor) : null;
       renderSeleccion();
+    });
+  }
+
+  if (viewButtons.length) {
+    viewButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const objetivo = button.dataset.view;
+        if (!objetivo || objetivo === state.viewMode) {
+          return;
+        }
+        state.viewMode = objetivo;
+        actualizarViewButtons();
+        renderSeleccion();
+      });
     });
   }
 
@@ -622,8 +718,10 @@ function construirNivelBase(estante, contenedores) {
     }
   }
 
+  actualizarViewButtons();
   cargarMapa();
 })();
+
 
 
 

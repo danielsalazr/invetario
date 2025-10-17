@@ -1,9 +1,11 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Sum
+from django.db import transaction
+from django.db.models import Sum, F
 from django.db.models.functions import Coalesce
 from rest_framework import serializers
 
 from . import models
+from .models import Ubicacion
 
 
 class InventarioSerializer(serializers.ModelSerializer):
@@ -84,6 +86,58 @@ class ArticuloSerializer(serializers.ModelSerializer):
         return urls
 
 
+class InventarioEntradaSerializer(serializers.Serializer):
+    ubicacion = serializers.PrimaryKeyRelatedField(
+        queryset=models.Ubicacion.objects.all(),
+    )
+    cantidad = serializers.IntegerField(min_value=1)
+
+    default_error_messages = {
+        "ubicacion_invalida": "Selecciona una ubicacion final valida.",
+    }
+
+    def validate(self, attrs):
+        ubicacion = attrs["ubicacion"]
+        if not ubicacion:
+            self.fail("ubicacion_invalida")
+        # Permitir registrar inventario directamente en cualquier nodo.
+        # Si en el futuro se requieren restricciones de tipo, este es el punto para aplicarlas.
+        return attrs
+
+    def save(self, **kwargs):
+        articulo = self.context["articulo"]
+        ubicacion = self.validated_data["ubicacion"]
+        cantidad = self.validated_data["cantidad"]
+
+        with transaction.atomic():
+            inventario_qs = models.Inventario.objects.select_for_update().filter(
+                articulos=articulo,
+                Ubicacion=ubicacion,
+            )
+
+            inventario = inventario_qs.first()
+            if inventario:
+                inventario_qs.update(cantidad=F("cantidad") + cantidad)
+                inventario.refresh_from_db(fields=["cantidad"])
+                created = False
+            else:
+                inventario = models.Inventario.objects.create(
+                    articulos=articulo,
+                    Ubicacion=ubicacion,
+                    cantidad=cantidad,
+                )
+                created = True
+
+            models.Entradas.objects.create(
+                articulo=articulo,
+                cantidad=cantidad,
+            )
+
+        self.instance = inventario
+        self.created = created
+        return inventario
+
+
 class FotosArticulosSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.FotosArticulos
@@ -153,3 +207,57 @@ class UbicacionCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         return models.Ubicacion.objects.create(**validated_data)
+
+
+class EstantesLoteSerializer(serializers.Serializer):
+    bodega = serializers.PrimaryKeyRelatedField(
+        queryset=models.Bodega.objects.all(),
+    )
+    nombre_base = serializers.CharField(max_length=Ubicacion._meta.get_field("nombre").max_length)
+    descripcion = serializers.CharField(
+        max_length=Ubicacion._meta.get_field("descripcion").max_length,
+        allow_blank=True,
+        required=False,
+    )
+    cantidad_estantes = serializers.IntegerField(min_value=1, max_value=200)
+    paneles_por_estante = serializers.IntegerField(min_value=0, max_value=50)
+    divisiones_por_panel = serializers.IntegerField(min_value=0, max_value=50)
+
+    def validate(self, attrs):
+        base = attrs.get("nombre_base", "").strip()
+        if not base:
+            raise serializers.ValidationError(
+                {"nombre_base": "Ingresa un nombre base para los estantes."},
+            )
+
+        descripcion = attrs.get("descripcion", "")
+        if descripcion:
+            attrs["descripcion"] = descripcion.strip()
+
+        attrs["nombre_base"] = base
+
+        paneles = attrs.get("paneles_por_estante") or 0
+        divisiones = attrs.get("divisiones_por_panel") or 0
+        if paneles == 0 and divisiones > 0:
+            raise serializers.ValidationError(
+                {
+                    "divisiones_por_panel": (
+                        "Debes crear al menos un panel por estante para agregar divisiones."
+                    )
+                },
+            )
+
+        max_nombre = Ubicacion._meta.get_field("nombre").max_length
+        cantidad = attrs.get("cantidad_estantes") or 1
+        padding = 3 if cantidad >= 100 else 2 if cantidad >= 10 else 1
+        reserva = padding + 1  # espacio + consecutivo
+        if len(base) > max_nombre - reserva:
+            raise serializers.ValidationError(
+                {
+                    "nombre_base": (
+                        "Reduce el nombre base para permitir agregar el consecutivo automatico."
+                    )
+                },
+            )
+
+        return attrs
