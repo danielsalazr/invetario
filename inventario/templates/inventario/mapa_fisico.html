@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+﻿{% extends "base.html" %}
 {% load static %}
 {% block container %}
 
@@ -259,7 +259,7 @@
 
   .shelf-frame {
     position: relative;
-    padding: 1.6rem 3.8rem;
+    padding: 1.6rem 3.8rem 2.6rem;
     background: linear-gradient(
       180deg,
       rgba(248, 250, 252, 0.95) 0%,
@@ -267,13 +267,13 @@
     );
     border-radius: 18px;
     border: 1px solid rgba(148, 163, 184, 0.45);
-    min-height: 160px;
+    min-height: 180px;
   }
 
   .shelf-rail {
     position: absolute;
     top: 1rem;
-    bottom: 1rem;
+    bottom: 1.4rem;
     width: 18px;
     border-radius: 6px;
     background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
@@ -324,7 +324,38 @@
   }
 
   .shelf-cross-bottom {
-    bottom: 0.7rem;
+    bottom: 1.2rem;
+  }
+
+  .shelf-cross-middle {
+    position: relative;
+    top: 0;
+    left: auto;
+    height: 10px;
+    margin: -1rem 0 -0.6rem;
+    opacity: 0.6;
+    width: 110%;
+        background: #27303e;/*linear-gradient(180deg, #1f2937 0%, #111827 100%);*/
+}
+  
+
+  .shelf-foot {
+    position: absolute;
+    bottom: -1.25rem;
+    width: 34px;
+    height: 24px;
+    background: linear-gradient(180deg, #0f172a 0%, #000 100%);
+    border-radius: 8px 8px 6px 6px;
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.45);
+    z-index: 0;
+  }
+
+  .shelf-foot-left {
+    left: 1.4rem;
+  }
+
+  .shelf-foot-right {
+    right: 1.4rem;
   }
 
   .shelf-level-stack {
@@ -348,9 +379,9 @@
     background: linear-gradient(145deg, #f8d9a8 0%, #deb176 100%);
     border: 1px solid rgba(217, 151, 73, 0.85);
     border-radius: 14px;
-    padding: 0.95rem 1.15rem;
+    padding: 1rem 1.15rem;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55),
-      0 10px 18px -12px rgba(15, 23, 42, 0.55);
+      0 12px 20px -14px rgba(15, 23, 42, 0.55);
   }
 
   .shelf-level-header {
@@ -374,7 +405,7 @@
   }
 
   .shelf-level-body {
-    margin-top: 0.7rem;
+    margin-top: 0.8rem;
     display: flex;
     flex-direction: column;
     gap: 0.7rem;
@@ -413,6 +444,64 @@
     font-size: 0.74rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
+  }
+
+  .shelf-panel-frame {
+    position: relative;
+    padding: 1.05rem 1.2rem;
+    border-radius: 12px;
+    background: rgba(226, 232, 240, 0.55);
+    border: 1px solid rgba(96, 165, 250, 0.55);
+    box-shadow: inset 0 0 0 1px rgba(96, 165, 250, 0.25);
+  }
+
+  .shelf-panel-frame::before,
+  .shelf-panel-frame::after {
+    content: "";
+    position: absolute;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    width: 10px;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #1e3a8a 0%, #172554 100%);
+    opacity: 0.85;
+  }
+
+  .shelf-panel-frame::before {
+    left: 0.45rem;
+  }
+
+  .shelf-panel-frame::after {
+    right: 0.45rem;
+  }
+
+  .shelf-panel-cross {
+    position: absolute;
+    left: 0.45rem;
+    right: 0.45rem;
+    height: 6px;
+    background: linear-gradient(180deg, #172554 0%, #0f172a 100%);
+    border-radius: 3px;
+    opacity: 0.85;
+  }
+
+  .shelf-panel-cross-top {
+    top: 0.25rem;
+  }
+
+  .shelf-panel-cross-bottom {
+    bottom: 0.25rem;
+  }
+
+  .shelf-panel-body {
+    position: relative;
+    background: rgba(191, 219, 254, 0.6);
+    border-radius: 10px;
+    padding: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
   }
 
   .divisiones-grid {
@@ -465,19 +554,7 @@
   .contenedor-chip span:last-child {
     font-size: 0.7rem;
     color: var(--text-muted);
-  }
-
-  .shelf-empty {
-    text-align: center;
-    padding: 2.2rem 1.6rem;
-    color: var(--text-muted);
-    font-style: italic;
-    background: rgba(148, 163, 184, 0.16);
-    border-radius: 14px;
-    border: 1px dashed rgba(148, 163, 184, 0.45);
-  }
-
-  .map-empty {
+  }\n  .map-empty {
     grid-column: 1 / -1;
     padding: 3rem 2rem;
     border-radius: 16px;
@@ -502,10 +579,10 @@
 
 <section class="map-layout">
   <header class="map-header">
-    <h1>Mapa físico de bodegas</h1>
+    <h1>Mapa fÃ­sico de bodegas</h1>
     <p>
-      Visualiza cada bodega con sus estanterías, paneles, divisiones y contenedores.
-      El panel con número 1 corresponde a la base del estante; los paneles superiores se muestran encima.
+      Visualiza cada bodega con sus estanterÃ­as, paneles, divisiones y contenedores.
+      El panel con nÃºmero 1 corresponde a la base del estante; los paneles superiores se muestran encima.
     </p>
     <div class="map-legend">
       <div class="map-legend-item">
@@ -524,7 +601,7 @@
     <div class="map-controls">
       <label for="selectorBodega">Selecciona una bodega:</label>
       <select id="selectorBodega">
-        <option value="">Selecciona una bodega…</option>
+        <option value="">Selecciona una bodegaâ€¦</option>
       </select>
     </div>
     <div class="map-summary" id="mapaResumen" style="display:none;"></div>
@@ -532,7 +609,7 @@
 
   <div class="estantes-wrapper" id="mapaFisico">
     <div class="map-empty" id="mapaEmptyState">
-      Selecciona una bodega para visualizar sus estanterías.
+      Selecciona una bodega para visualizar sus estanterÃ­as.
     </div>
   </div>
 </section>
@@ -548,3 +625,5 @@
 <script src="{% static 'js/mapa_fisico.js' %}"></script>
 
 {% endblock container %}
+
+

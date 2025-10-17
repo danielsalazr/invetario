@@ -1,4 +1,4 @@
-(() => {
+﻿(() => {
   const config = window.ubicacionesConfig || {};
   const ubicacionesEndpoint =
     config.endpoints?.ubicaciones || "/inventario/ubicaciones/api/";
@@ -178,6 +178,7 @@
     etiqueta,
     etiquetaTipo = "numero",
     contenido,
+    tipo = "panel",
   }) {
     const level = document.createElement("div");
     level.className = "shelf-level";
@@ -222,12 +223,40 @@
       body.innerHTML = contenido;
     }
 
-    if (!body.childElementCount && !body.textContent.trim()) {
-      body.classList.add("shelf-level-body--empty");
-      body.textContent = "Sin contenedores registrados.";
+    let contenidoNodo = body;
+
+    if (tipo === "panel") {
+      const frame = document.createElement("div");
+      frame.className = "shelf-panel-frame";
+
+      const crossTop = document.createElement("div");
+      crossTop.className = "shelf-panel-cross shelf-panel-cross-top";
+      const crossBottom = document.createElement("div");
+      crossBottom.className = "shelf-panel-cross shelf-panel-cross-bottom";
+      const panelBody = document.createElement("div");
+      panelBody.className = "shelf-panel-body";
+
+      while (body.firstChild) {
+        panelBody.appendChild(body.firstChild);
+      }
+
+      if (!panelBody.childElementCount && !panelBody.textContent.trim()) {
+        panelBody.classList.add("shelf-level-body--empty");
+        panelBody.textContent = "Sin contenedores registrados.";
+      }
+
+      frame.appendChild(crossTop);
+      frame.appendChild(crossBottom);
+      frame.appendChild(panelBody);
+      contenidoNodo = frame;
+    } else {
+      if (!body.childElementCount && !body.textContent.trim()) {
+        body.classList.add("shelf-level-body--empty");
+        body.textContent = "Sin contenedores registrados.";
+      }
     }
 
-    board.appendChild(body);
+    board.appendChild(contenidoNodo);
     level.appendChild(board);
 
     if (etiqueta) {
@@ -264,32 +293,34 @@
         : panel.numero != null
           ? `#${panel.numero}`
           : "";
-    const etiqueta =
-      panel.numero != null ? String(panel.numero) : "Nivel";
+  const etiqueta =
+    panel.numero != null ? String(panel.numero) : "Nivel";
 
-    return crearNivel({
-      nombre: panel.nombre || "Panel",
-      codigo,
-      etiqueta,
-      contenido,
-    });
-  }
+  return crearNivel({
+    nombre: panel.nombre || "Panel",
+    codigo,
+    etiqueta,
+    contenido,
+    tipo: "panel",
+  });
+}
 
-  function construirNivelBase(estante, contenedores) {
-    const codigo =
+function construirNivelBase(estante, contenedores) {
+  const codigo =
       estante.nomenclatura && estante.nomenclatura !== ""
         ? estante.nomenclatura
         : estante.numero != null
           ? `#${estante.numero}`
           : "";
-    return crearNivel({
-      nombre: "Nivel base",
-      codigo,
-      etiqueta: "Base",
-      etiquetaTipo: "base",
-      contenido: construirContenedores(contenedores),
-    });
-  }
+  return crearNivel({
+    nombre: "Nivel base",
+    codigo,
+    etiqueta: "Base",
+    etiquetaTipo: "base",
+    contenido: construirContenedores(contenedores),
+    tipo: "base",
+  });
+}
 
   function calcularResumenEstante(estante) {
     const paneles = filtrarPorTipo(estante, "PANEL");
@@ -370,6 +401,13 @@
     frame.appendChild(railLeft);
     frame.appendChild(railRight);
 
+    const footLeft = document.createElement("div");
+    footLeft.className = "shelf-foot shelf-foot-left";
+    const footRight = document.createElement("div");
+    footRight.className = "shelf-foot shelf-foot-right";
+    frame.appendChild(footLeft);
+    frame.appendChild(footRight);
+
     const niveles = document.createElement("div");
     niveles.className = "shelf-level-stack";
 
@@ -379,7 +417,12 @@
     }
 
     const panelesOrdenados = datos.paneles.slice().sort(ordenarUbicaciones);
-    panelesOrdenados.forEach((panel) => {
+    panelesOrdenados.forEach((panel, index) => {
+      if (index > 0) {
+        const separator = document.createElement("div");
+        separator.className = "shelf-cross shelf-cross-bottom shelf-cross-middle";
+        niveles.appendChild(separator);
+      }
       niveles.appendChild(construirNivelPanel(panel));
     });
 
@@ -517,7 +560,7 @@
   function poblarSelector(bodegasLista) {
     if (!selectorBodega) return;
     selectorBodega.innerHTML =
-      '<option value="">Selecciona una bodega…</option>';
+      '<option value="">Selecciona una bodegaâ€¦</option>';
     bodegasLista.forEach((bodega) => {
       const option = document.createElement("option");
       option.value = bodega.id ?? "";
@@ -581,3 +624,9 @@
 
   cargarMapa();
 })();
+
+
+
+
+
+
