@@ -1,15 +1,15 @@
 from django.contrib import admin
 from django.utils.html import mark_safe
 
+from rich.console import Console
 
 from . import models
-from rich.console import Console
-console=Console()
 
-# Register your models here.
-# admin.site.register(Estado)
-# admin.site.register(Inventario)
+console = Console()
+
 admin.site.register(models.FotosArticulos)
+
+
 @admin.register(models.Bodega)
 class BodegaAdmin(admin.ModelAdmin):
     search_fields = ("nombre",)
@@ -33,91 +33,64 @@ class UbicacionAdmin(admin.ModelAdmin):
     readonly_fields = ("numero", "nivel", "creado_en", "actualizado_en")
 
 
+@admin.register(models.Marca)
+class MarcaAdmin(admin.ModelAdmin):
+    search_fields = ("nombre",)
+    list_display = ("nombre",)
+
+
+@admin.register(models.UnidadMedida)
+class UnidadMedidaAdmin(admin.ModelAdmin):
+    search_fields = ("nombre",)
+    list_display = ("nombre",)
+
+
 class FotosInline(admin.StackedInline):
     model = models.FotosArticulos
     extra = 0
-    readonly_fields = ['cover_preview']
+    readonly_fields = ["cover_preview"]
 
     def cover_preview(self, obj):
-        # console.log("activadp")
-        # console.log(obj)
-        # console.log(obj.foto)
-        if obj:
-            return mark_safe(f'<img src="http://localhost:8000/media/{obj.foto}" style="width: 200px; height: auto;" />')
+        if obj and obj.foto:
+            return mark_safe(
+                f'<img src="http://localhost:8000/media/{obj.foto}" '
+                f'style="width: 200px; height: auto;" />'
+            )
         return "No image available"
 
     cover_preview.short_description = "Cover Preview"
 
+
 @admin.register(models.Articulo)
-class InventarioAdmin(admin.ModelAdmin):
+class ArticuloAdmin(admin.ModelAdmin):
     inlines = [FotosInline]
-
     list_display = (
-        # 'id',
-        'code',
-        'descripcion',
-        'observacion',
-        'cover_preview',
-        # 'foto',
-        # 'marca',
+        "code",
+        "descripcion",
+        "marca",
+        "unidad_de_medida",
+        "observacion",
+        "cover_preview",
     )
-
-    list_display_links = (
-        # 'id',
-        'code',
-        # 'enableCopy',
-    )
-
-    # fields = [
-    #   ('articulo', 'codigo'),
-    #   ('observacion', ),
-    #   ('estado', 'marca'),
-    # ]
-
-    # search_fields = ['articulo', 'codigo']
+    list_display_links = ("code",)
+    search_fields = ("descripcion", "observacion", "marca__nombre")
+    autocomplete_fields = ("marca", "unidad_de_medida")
 
     def cover_preview(self, obj):
-        # Verifica si el artículo tiene imágenes asociadas
-        console.log(obj.articuloFoto.all())
-        try:
-            fotos = obj.articuloFoto.all() #first()  # Obtén la primera foto relacionada
-            # console.log(fotos.foto)
-            if len(fotos) > 0:  # Verifica si existe una foto
-                # return mark_safe(f'<img src="http://localhost:8000/media/{fotos.foto}" style="width: 100px; height: auto;" />')
-                imagenes_html = ''.join([
-                    f'<img src="http://localhost:8000/media/{foto.foto}" style="width: 100px; height: auto; margin-right: 5px;" />'
-                    for foto in fotos
-                ])
-                console.log(imagenes_html)
-                return mark_safe(imagenes_html)
+        fotos = getattr(obj, "articuloFoto", None)
+        if not fotos:
             return "No image available"
-        except:
+        try:
+            imagenes = [
+                f'<img src="http://localhost:8000/media/{foto.foto}" '
+                f'style="width: 100px; height: auto; margin-right: 5px;" />'
+                for foto in fotos.all()
+                if foto.foto
+            ]
+            if imagenes:
+                html = "".join(imagenes)
+                console.log(html)
+                return mark_safe(html)
+        except Exception:
             pass
-        # 
-
-# @admin.register(models.FotosArticulos)
-# class Estadodmin(admin.ModelAdmin):
-#     list_display = (
-#         'id',
-#         'nombre',
-#     )
-
-#     list_display_links = (
-#         'id',
-#         'nombre',
-#         # 'enableCopy',
-#     )
-
-
-# @admin.register(Marca)
-# class MarcaAdmin(admin.ModelAdmin):
-#     list_display = (
-#         'id',
-#         'nombre',
-#     )
-
-#     list_display_links = (
-#         'id',
-#         'nombre',
-#         # 'enableCopy',
-#     )
+        return "No image available"

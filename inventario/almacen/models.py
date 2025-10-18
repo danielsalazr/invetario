@@ -214,15 +214,53 @@ class Ubicacion(models.Model):
 
 
 
+class Marca(models.Model):
+    id = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        verbose_name = "Marca"
+        verbose_name_plural = "Marcas"
+        ordering = ("nombre",)
+
+    def __str__(self):
+        return self.nombre
+
+
+class UnidadMedida(models.Model):
+    id = models.AutoField(primary_key=True)
+    nombre = models.CharField(max_length=255, unique=True)
+
+    class Meta:
+        verbose_name = "Unidad de medida"
+        verbose_name_plural = "Unidades de medida"
+        ordering = ("nombre",)
+
+    def __str__(self):
+        return self.nombre
+
+
 class Articulo(models.Model):
     # id = models.IntegerField(default= self.objects.count + 1)
     code = models.AutoField(primary_key=True)
     # code = models.CharField(primary_key=True, max_length=30, unique=True)
     descripcion = models.CharField(max_length=255)
     observacion = models.CharField(max_length=255, null=True, blank=True)
-    marca = models.CharField(max_length=255, null=True, blank=True)
-    unidad_de_medida = models.CharField(max_length=255, null=True, blank=True)
-    
+    marca = models.ForeignKey(
+        Marca,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="articulos",
+    )
+    unidad_de_medida = models.ForeignKey(
+        UnidadMedida,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="articulos",
+    )
+
 
     class Meta:
         managed = True

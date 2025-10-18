@@ -6,6 +6,11 @@
   const ubicacionesEndpoint =
     endpoints.ubicaciones || "/inventario/ubicaciones/api/";
   const bodegasEndpoint = endpoints.bodegas || "/inventario/bodegas/api/";
+  const marcasEndpoint = endpoints.marcas || "/inventario/marcas/api/";
+  const unidadesMedidaEndpoint =
+    endpoints.unidades_medida || "/inventario/unidades-medida/api/";
+  const $ = window.jQuery || null;
+  const hasSelect2 = Boolean($ && $.fn && $.fn.select2);
   const UBICACION_STORAGE_KEY = "inventario::seleccionUbicacion";
 
   const form = document.querySelector("#formArticulo");
@@ -47,6 +52,8 @@
   const ubicacionSelect = document.querySelector("#selectorUbicacion");
   const lockButton = document.querySelector("#bloquearUbicacionBtn");
   const seleccionResumen = document.querySelector("#inventarioSeleccionResumen");
+  const marcaSelect = document.querySelector("#marca");
+  const unidadSelect = document.querySelector("#unidad_de_medida");
 
   if (!form || !tablaBody || !filaTemplate) {
     return;
@@ -161,6 +168,8 @@
     seleccionado: null,
     resumen: {},
     bodegas: [],
+    marcas: [],
+    unidades: [],
     ubicacionesCache: new Map(),
     seleccionUbicacion: {
       bodegaId: null,
@@ -238,7 +247,7 @@
       removeBtn.className = "remove-preview";
       removeBtn.dataset.removePhoto = item.id;
       removeBtn.setAttribute("aria-label", "Eliminar fotografia");
-      removeBtn.textContent = "×";
+      removeBtn.textContent = "X";
       card.appendChild(removeBtn);
 
       fragment.appendChild(card);
@@ -433,7 +442,7 @@
     if (ruta) {
       partes.push(ruta);
     }
-    const base = partes.filter(Boolean).join(" — ") || `Ubicacion ${item.id}`;
+    const base = partes.filter(Boolean).join(" - ") || `Ubicacion ${item.id}`;
     if (item.tipo_display) {
       return `${base} (${item.tipo_display})`;
     }
@@ -456,9 +465,72 @@
     );
   }
 
+  function isSelect2Active(element) {
+    return Boolean(hasSelect2 && element && $(element).data("select2"));
+  }
+
+  function setOptionsForSelect(element, optionsList, selectedValue) {
+    if (!element) {
+      return;
+    }
+    const value =
+      selectedValue !== undefined && selectedValue !== null
+        ? String(selectedValue)
+        : "";
+
+    if (isSelect2Active(element)) {
+      const $element = $(element);
+      $element.empty();
+      optionsList.forEach((option) => {
+        const optionValue =
+          option && option.value !== undefined && option.value !== null
+            ? String(option.value)
+            : "";
+        const optionLabel =
+          option && option.label !== undefined && option.label !== null
+            ? String(option.label)
+            : "";
+        $element.append(new Option(optionLabel, optionValue, false, false));
+      });
+      $element.val(value || null).trigger("change.select2");
+      return;
+    }
+
+    element.innerHTML = "";
+    optionsList.forEach((option) => {
+      const optionValue =
+        option && option.value !== undefined && option.value !== null
+          ? String(option.value)
+          : "";
+      const optionLabel =
+        option && option.label !== undefined && option.label !== null
+          ? String(option.label)
+          : "";
+      const optionElement = document.createElement("option");
+      optionElement.value = optionValue;
+      optionElement.textContent = optionLabel;
+      if (option && option.dataset && typeof option.dataset === "object") {
+        Object.entries(option.dataset).forEach(([key, dato]) => {
+          if (key) {
+            optionElement.dataset[key] = dato ?? "";
+          }
+        });
+      }
+      element.appendChild(optionElement);
+    });
+    element.value = value;
+  }
+
   function setSelectDisabled(element, disabled) {
     if (!element) return;
     element.disabled = Boolean(disabled);
+    if (isSelect2Active(element)) {
+      const $element = $(element);
+      $element.prop("disabled", Boolean(disabled));
+      if (disabled) {
+        $element.select2("close");
+      }
+    }
   }
 
   function populateBodegaOptions(selectedValue = null) {
@@ -471,20 +543,16 @@
         ? String(state.seleccionUbicacion.bodegaId)
         : "";
 
-    bodegaSelect.innerHTML = "";
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = "";
-    bodegaSelect.appendChild(placeholder);
+    const placeholderLabel = bodegaSelect.dataset.placeholder || "";
+    const opciones = [
+      { value: "", label: placeholderLabel },
+      ...state.bodegas.map((bodega) => ({
+        value: String(bodega.id),
+        label: bodega.nombre,
+      })),
+    ];
 
-    state.bodegas.forEach((bodega) => {
-      const option = document.createElement("option");
-      option.value = String(bodega.id);
-      option.textContent = bodega.nombre;
-      bodegaSelect.appendChild(option);
-    });
-
-    bodegaSelect.value = valorSeleccionado || "";
+    setOptionsForSelect(bodegaSelect, opciones, valorSeleccionado);
   }
 
   function populateUbicacionOptions(lista, selectedValue = null) {
@@ -497,30 +565,65 @@
         ? String(state.seleccionUbicacion.ubicacionId)
         : "";
 
-    console.log(
-      "Ubicaciones disponibles",
-      state.seleccionUbicacion.bodegaId,
-      lista.map((item) => ({ id: item.id, etiqueta: buildUbicacionLabel(item) })),
-    );
+    const placeholderLabel = ubicacionSelect.dataset.placeholder || "";
+    const opciones = [
+      { value: "", label: placeholderLabel },
+      ...lista.map((item) => ({
+        value: String(item.id),
+        label: buildUbicacionLabel(item),
+      })),
+    ];
 
-    ubicacionSelect.innerHTML = "";
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = "";
-    ubicacionSelect.appendChild(placeholder);
-
-    lista.forEach((item) => {
-      const option = document.createElement("option");
-      option.value = String(item.id);
-      option.textContent = buildUbicacionLabel(item);
-      option.dataset.ruta = item.ruta || "";
-      option.dataset.nomenclatura = item.nomenclatura || "";
-      ubicacionSelect.appendChild(option);
-    });
-
-    ubicacionSelect.value = valorSeleccionado || "";
+    setOptionsForSelect(ubicacionSelect, opciones, valorSeleccionado);
   }
 
+  function populateMarcaOptions(selectedValue = null) {
+    if (!marcaSelect) return;
+    const placeholderLabel = marcaSelect.dataset.placeholder || "Selecciona una marca";
+    const opciones = [
+      { value: "", label: placeholderLabel },
+      ...state.marcas.map((item) => ({
+        value: String(item.id),
+        label: item.nombre || "",
+      })),
+    ];
+    setOptionsForSelect(marcaSelect, opciones, selectedValue);
+  }
+
+  function populateUnidadMedidaOptions(selectedValue = null) {
+    if (!unidadSelect) return;
+    const placeholderLabel = unidadSelect.dataset.placeholder || "Selecciona una unidad";
+    const opciones = [
+      { value: "", label: placeholderLabel },
+      ...state.unidades.map((item) => ({
+        value: String(item.id),
+        label: item.nombre || "",
+      })),
+    ];
+    setOptionsForSelect(unidadSelect, opciones, selectedValue);
+  }
+
+  function initFormularioSelects() {
+    if (hasSelect2) {
+      if (marcaSelect && !isSelect2Active(marcaSelect)) {
+        $(marcaSelect).select2({
+          placeholder: marcaSelect.dataset.placeholder || "Selecciona una marca",
+          allowClear: true,
+          width: "resolve",
+        });
+      }
+      if (unidadSelect && !isSelect2Active(unidadSelect)) {
+        $(unidadSelect).select2({
+          placeholder: unidadSelect.dataset.placeholder || "Selecciona una unidad",
+          allowClear: true,
+          width: "resolve",
+        });
+      }
+    }
+
+    populateMarcaOptions(marcaSelect ? marcaSelect.value : "");
+    populateUnidadMedidaOptions(unidadSelect ? unidadSelect.value : "");
+  }
   function flattenUbicaciones(raices) {
     const resultado = [];
     const pila = Array.isArray(raices) ? [...raices] : [];
@@ -557,7 +660,7 @@
     const bodegaNombre = getBodegaName(bodegaId) || `Bodega ${bodegaId}`;
     const ubicacion = getUbicacionFromCache(bodegaId, ubicacionId);
     const ubicacionTexto = buildUbicacionLabel(ubicacion);
-    seleccionResumen.textContent = `${locked ? "Seleccion actual" : "Seleccion preparada"}: ${bodegaNombre} • ${ubicacionTexto}`;
+    seleccionResumen.textContent = `${locked ? "Seleccion actual" : "Seleccion preparada"}: ${bodegaNombre} - ${ubicacionTexto}`;
   }
 
   function persistSeleccion() {
@@ -643,6 +746,52 @@
     }
   }
 
+
+  async function loadMarcas() {
+    if (!marcaSelect) {
+      return;
+    }
+    try {
+      const response = await fetch(marcasEndpoint, {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        throw new Error("No fue posible cargar las marcas.");
+      }
+      const data = await response.json();
+      state.marcas = Array.isArray(data) ? data : [];
+      populateMarcaOptions(marcaSelect.value);
+    } catch (error) {
+      console.error(error);
+      if (typeof swalErr === "function") {
+        swalErr("No fue posible cargar el listado de marcas.");
+      }
+    }
+  }
+
+  async function loadUnidadesMedida() {
+    if (!unidadSelect) {
+      return;
+    }
+    try {
+      const response = await fetch(unidadesMedidaEndpoint, {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        throw new Error("No fue posible cargar las unidades de medida.");
+      }
+      const data = await response.json();
+      state.unidades = Array.isArray(data) ? data : [];
+      populateUnidadMedidaOptions(unidadSelect.value);
+    } catch (error) {
+      console.error(error);
+      if (typeof swalErr === "function") {
+        swalErr("No fue posible cargar el listado de unidades de medida.");
+      }
+    }
+  }
   async function loadUbicacionesForBodega(bodegaId, options = {}) {
     const { preselect } = options;
     if (!ubicacionSelect || !bodegaId) {
@@ -740,8 +889,12 @@
     toggleSelectionLock(true);
   }
 
-  async function handleBodegaChange(event) {
-    const valor = parsePositiveInt(event.target.value);
+  async function handleBodegaChange(eventOrValue) {
+    const rawValue =
+      eventOrValue && typeof eventOrValue === "object" && "target" in eventOrValue
+        ? eventOrValue.target.value
+        : eventOrValue;
+    const valor = parsePositiveInt(rawValue);
     state.seleccionUbicacion.bodegaId = valor;
     if (restoringSeleccion) {
       return;
@@ -755,8 +908,12 @@
     await loadUbicacionesForBodega(valor);
   }
 
-  function handleUbicacionChange(event) {
-    const valor = parsePositiveInt(event.target.value);
+  function handleUbicacionChange(eventOrValue) {
+    const rawValue =
+      eventOrValue && typeof eventOrValue === "object" && "target" in eventOrValue
+        ? eventOrValue.target.value
+        : eventOrValue;
+    const valor = parsePositiveInt(rawValue);
     state.seleccionUbicacion.ubicacionId = valor;
     if (restoringSeleccion) {
       return;
@@ -809,14 +966,56 @@
       return;
     }
 
+    if (hasSelect2) {
+      const bodegaPlaceholder =
+        bodegaSelect.dataset.placeholder || "Selecciona una bodega";
+      const ubicacionPlaceholder =
+        ubicacionSelect.dataset.placeholder || "Selecciona una ubicacion";
+
+      if (!isSelect2Active(bodegaSelect)) {
+        $(bodegaSelect).select2({
+          placeholder: bodegaPlaceholder,
+          allowClear: true,
+          width: "resolve",
+        });
+      }
+
+      if (!isSelect2Active(ubicacionSelect)) {
+        $(ubicacionSelect).select2({
+          placeholder: ubicacionPlaceholder,
+          allowClear: true,
+          width: "resolve",
+        });
+      }
+
+      $(bodegaSelect)
+        .off(".inventario")
+        .on("select2:select.inventario", () => {
+          handleBodegaChange($(bodegaSelect).val());
+        })
+        .on("select2:clear.inventario", () => {
+          handleBodegaChange(null);
+        });
+
+      $(ubicacionSelect)
+        .off(".inventario")
+        .on("select2:select.inventario", () => {
+          handleUbicacionChange($(ubicacionSelect).val());
+        })
+        .on("select2:clear.inventario", () => {
+          handleUbicacionChange(null);
+        });
+    } else {
+      bodegaSelect.addEventListener("change", handleBodegaChange);
+      ubicacionSelect.addEventListener("change", handleUbicacionChange);
+    }
+
+    lockButton.addEventListener("click", handleLockButtonClick);
+
     populateBodegaOptions();
     populateUbicacionOptions([]);
     setSelectDisabled(ubicacionSelect, true);
     updateLockButtonUI();
-
-    bodegaSelect.addEventListener("change", handleBodegaChange);
-    ubicacionSelect.addEventListener("change", handleUbicacionChange);
-    lockButton.addEventListener("click", handleLockButtonClick);
 
     (async () => {
       await loadBodegas();
@@ -844,9 +1043,12 @@
         .firstElementChild.cloneNode(true);
       row.dataset.code = item.code;
 
+      const marcaNombre = item?.marca_detalle?.nombre || "";
+      const unidadNombre = item?.unidad_medida_detalle?.nombre || "";
+
       row
         .querySelector('[data-field="code"]')
-        ?.append(document.createTextNode(formatValue(item.code, "—")));
+        ?.append(document.createTextNode(formatValue(item.code, "-")));
       row
         .querySelector('[data-field="descripcion"]')
         ?.append(
@@ -856,12 +1058,16 @@
         );
       row
         .querySelector('[data-field="marca"]')
-        ?.append(document.createTextNode(formatValue(item.marca, "—")));
+        ?.append(
+          document.createTextNode(
+            formatValue(marcaNombre, "Sin marca"),
+          ),
+        );
       row
         .querySelector('[data-field="unidad_de_medida"]')
         ?.append(
           document.createTextNode(
-            formatValue(item.unidad_de_medida, "—"),
+            formatValue(unidadNombre, "Sin unidad"),
           ),
         );
       row
@@ -987,7 +1193,7 @@
 
       if (secundarios.length) {
         const detalle = document.createElement("span");
-        detalle.textContent = secundarios.join(" · ");
+        detalle.textContent = secundarios.join(" - ");
         info.appendChild(detalle);
       }
 
@@ -1134,11 +1340,14 @@
     const metaData = [
       {
         label: "Marca",
-        value: formatValue(articulo.marca),
+        value: formatValue(articulo?.marca_detalle?.nombre, "Sin marca"),
       },
       {
         label: "Unidad de medida",
-        value: formatValue(articulo.unidad_de_medida),
+        value: formatValue(
+          articulo?.unidad_medida_detalle?.nombre,
+          "Sin unidad",
+        ),
       },
       {
         label: "Existencias",
@@ -1282,10 +1491,16 @@
       state.filtrados = [...state.articulos];
     } else {
       state.filtrados = state.articulos.filter((item) => {
-        const hayCoincidencia = [item.code, item.descripcion, item.marca]
+        const campos = [
+          item.code,
+          item.descripcion,
+          item.observacion,
+          item?.marca_detalle?.nombre,
+          item?.unidad_medida_detalle?.nombre,
+        ];
+        return campos
           .map((value) => (value || "").toString().toLowerCase())
           .some((value) => value.includes(term));
-        return hayCoincidencia;
       });
     }
     renderTabla(state.filtrados);
@@ -1358,6 +1573,12 @@
       Number.isFinite(cantidadInicialValor) && cantidadInicialValor > 0
         ? cantidadInicialValor
         : 0;
+    if (!formData.get("marca")) {
+      formData.delete("marca");
+    }
+    if (!formData.get("unidad_de_medida")) {
+      formData.delete("unidad_de_medida");
+    }
     try {
       const headers = csrfToken ? { "X-CSRFToken": csrfToken } : {};
       const response = await fetch(articulosEndpoint, {
@@ -1396,6 +1617,7 @@
       }
 
       form.reset();
+      resetFormularioSelects();
       resetPhotoManager();
       closeCamera();
 
@@ -1451,11 +1673,25 @@
     }
   }
 
+  function resetFormularioSelects() {
+    const selects = [marcaSelect, unidadSelect];
+    selects.forEach((select) => {
+      if (!select) {
+        return;
+      }
+      if (isSelect2Active(select)) {
+        $(select).val(null).trigger("change.select2");
+      } else {
+        select.value = "";
+      }
+    });
+  }
+
   function toggleFormulario(visible) {
     if (!panelFormulario) return;
     panelFormulario.dataset.collapsed = visible ? "false" : "true";
     if (visible) {
-      form.querySelector("#code")?.focus();
+      form.querySelector("#descripcion")?.focus();
     }
   }
 
@@ -1463,6 +1699,9 @@
     form.addEventListener("submit", enviarFormulario);
 
     initUbicacionSelectors();
+    initFormularioSelects();
+    loadMarcas();
+    loadUnidadesMedida();
 
     if (abrirFormularioBtn) {
       abrirFormularioBtn.addEventListener("click", () => {
@@ -1582,3 +1821,6 @@
   renderPhotoPreview();
   cargarArticulos();
 })();
+
+
+

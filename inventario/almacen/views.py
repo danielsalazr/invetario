@@ -13,12 +13,16 @@ from .models import (
     Bodega,
     FotosArticulos,
     Inventario,
+    Marca,
+    UnidadMedida,
     Ubicacion,
 )
 from .serializers import (
     ArticuloSerializer,
     InventarioEntradaSerializer,
     InventarioSerializer,
+    MarcaSerializer,
+    UnidadMedidaSerializer,
     UbicacionCreateSerializer,
     UbicacionTreeSerializer,
     EstantesLoteSerializer,
@@ -33,6 +37,7 @@ class Articulos(APIView):
     def get(self, request):
         articulos_queryset = (
             Articulo.objects.all()
+            .select_related("marca", "unidad_de_medida")
             .prefetch_related(
                 "articuloFoto",
                 "articulo__Ubicacion__bodega",
@@ -93,6 +98,20 @@ class Articulos(APIView):
         ).data
 
         return Response(respuesta, status=status.HTTP_201_CREATED)
+
+
+class MarcasView(APIView):
+    def get(self, request):
+        marcas = Marca.objects.order_by("nombre")
+        serializer = MarcaSerializer(marcas, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class UnidadesMedidaView(APIView):
+    def get(self, request):
+        unidades = UnidadMedida.objects.order_by("nombre")
+        serializer = UnidadMedidaSerializer(unidades, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class BodegasView(APIView):

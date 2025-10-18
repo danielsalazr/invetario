@@ -8,6 +8,20 @@ from . import models
 from .models import Ubicacion
 
 
+class MarcaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Marca
+        fields = ["id", "nombre"]
+        read_only_fields = fields
+
+
+class UnidadMedidaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.UnidadMedida
+        fields = ["id", "nombre"]
+        read_only_fields = fields
+
+
 class InventarioSerializer(serializers.ModelSerializer):
     ubicacion = serializers.SerializerMethodField()
 
@@ -37,6 +51,21 @@ class InventarioSerializer(serializers.ModelSerializer):
 
 
 class ArticuloSerializer(serializers.ModelSerializer):
+    marca = serializers.PrimaryKeyRelatedField(
+        queryset=models.Marca.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+    unidad_de_medida = serializers.PrimaryKeyRelatedField(
+        queryset=models.UnidadMedida.objects.all(),
+        allow_null=True,
+        required=False,
+    )
+    marca_detalle = MarcaSerializer(source="marca", read_only=True)
+    unidad_medida_detalle = UnidadMedidaSerializer(
+        source="unidad_de_medida",
+        read_only=True,
+    )
     existencias = serializers.SerializerMethodField()
     fotos = serializers.SerializerMethodField()
     inventario = InventarioSerializer(source="articulo", many=True, read_only=True)
@@ -48,17 +77,23 @@ class ArticuloSerializer(serializers.ModelSerializer):
             "descripcion",
             "observacion",
             "marca",
+            "marca_detalle",
             "unidad_de_medida",
+            "unidad_medida_detalle",
             "existencias",
             "fotos",
             "inventario",
         ]
         extra_kwargs = {
             "observacion": {"required": False},
-            "marca": {"required": False},
-            "unidad_de_medida": {"required": False},
         }
-        read_only_fields = ["existencias", "fotos", "inventario"]
+        read_only_fields = [
+            "existencias",
+            "fotos",
+            "inventario",
+            "marca_detalle",
+            "unidad_medida_detalle",
+        ]
 
     def get_existencias(self, obj):
         if hasattr(obj, "existencias_total"):

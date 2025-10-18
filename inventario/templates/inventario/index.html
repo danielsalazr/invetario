@@ -904,32 +904,20 @@
         {% csrf_token %}
         <div class="form-grid">
           <div class="form-group">
-            <label for="code">Codigo *</label>
+            <label for="cantidad_inicial">Cantidad a ingresar</label>
             <input
-              type="text"
-              name="code"
-              id="code"
-              maxlength="30"
-              required
-          placeholder="Ej: A-001"
-        />
-      </div>
+              type="number"
+              name="cantidad_inicial"
+              id="cantidad_inicial"
+              min="0"
+              placeholder="Cantidad inicial (opcional)"
+            />
+          </div>
 
-      <div class="form-group">
-        <label for="cantidad_inicial">Cantidad a ingresar</label>
-        <input
-          type="number"
-          name="cantidad_inicial"
-          id="cantidad_inicial"
-          min="0"
-          placeholder="Cantidad inicial (opcional)"
-        />
-      </div>
-
-      <div class="form-group">
-        <label for="descripcion">Descripcion *</label>
-        <textarea
-          name="descripcion"
+          <div class="form-group">
+            <label for="descripcion">Descripcion *</label>
+            <textarea
+              name="descripcion"
               id="descripcion"
               maxlength="255"
               required
@@ -939,24 +927,26 @@
 
           <div class="form-group">
             <label for="marca">Marca</label>
-            <input
-              type="text"
+            <select
               name="marca"
               id="marca"
-              maxlength="255"
-              placeholder="Marca o fabricante"
-            />
+              data-placeholder="Selecciona una marca"
+              data-allow-clear="true"
+            >
+              <option value="">Selecciona una marca</option>
+            </select>
           </div>
 
           <div class="form-group">
             <label for="unidad_de_medida">Unidad de medida</label>
-            <input
-              type="text"
+            <select
               name="unidad_de_medida"
               id="unidad_de_medida"
-              maxlength="255"
-              placeholder="Ej: Unidad, Caja, Litros"
-            />
+              data-placeholder="Selecciona una unidad"
+              data-allow-clear="true"
+            >
+              <option value="">Selecciona una unidad</option>
+            </select>
           </div>
 
           <div class="form-group">
@@ -1018,10 +1008,7 @@
           <button type="submit" class="primary-button" id="guardarArticulo">
             Guardar articulo
           </button>
-          <span class="hint"
-            >Los campos marcados con * son obligatorios. El codigo debe ser
-            unico.</span
-          >
+          <span class="hint">Los campos marcados con * son obligatorios.</span>
         </div>
       </form>
     </aside>
@@ -1162,6 +1149,8 @@
       articulos: "{% url 'articulos' %}",
       ubicaciones: "{% url 'ubicaciones_api' %}",
       bodegas: "{% url 'bodegas_api' %}",
+      marcas: "{% url 'marcas_api' %}",
+      unidades_medida: "{% url 'unidades_medida_api' %}",
     },
   };
 </script>
