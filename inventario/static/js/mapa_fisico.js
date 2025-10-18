@@ -24,6 +24,12 @@
 
   const BULLET = " \u00B7 ";
 
+  const TIPOS_BASE = new Set(["ESTANTE", "ESTIBA"]);
+
+  function esTipoNivelBase(tipo) {
+    return TIPOS_BASE.has(tipo);
+  }
+
   function actualizarViewButtons() {
     if (!viewButtons.length) return;
     viewButtons.forEach((button) => {
@@ -93,7 +99,7 @@
     const recorrer = (lista) => {
       lista.forEach((nodo) => {
         if (!nodo) return;
-        if (nodo.tipo === "ESTANTE") {
+        if (esTipoNivelBase(nodo.tipo)) {
           estantes.push(nodo);
         }
         if (Array.isArray(nodo.hijos) && nodo.hijos.length) {
@@ -332,6 +338,64 @@ function construirNivelBase(estante, contenedores) {
   });
 }
 
+  function construirEstibaDetalle(estiba) {
+    const card = document.createElement("div");
+    card.className = "estante-card estante-card--estiba";
+
+    const datos = calcularResumenEstante(estiba);
+    const header = crearEncabezadoEstante(estiba, datos);
+    card.appendChild(header);
+
+    const frame = document.createElement("div");
+    frame.className = "estiba-frame";
+
+    const top = document.createElement("div");
+    top.className = "estiba-top";
+    for (let index = 0; index < 5; index += 1) {
+      const plank = document.createElement("div");
+      plank.className = "estiba-plank";
+      top.appendChild(plank);
+    }
+    frame.appendChild(top);
+
+    const center = document.createElement("div");
+    center.className = "estiba-center";
+    frame.appendChild(center);
+
+    const base = document.createElement("div");
+    base.className = "estiba-base";
+    for (let index = 0; index < 3; index += 1) {
+      const block = document.createElement("div");
+      block.className = "estiba-block";
+      base.appendChild(block);
+    }
+    frame.appendChild(base);
+
+    card.appendChild(frame);
+
+    const contenedores = filtrarPorTipo(estiba, "CONTENEDOR");
+    const carga = document.createElement("div");
+    carga.className = "estiba-load";
+
+    if (contenedores.length) {
+      const titulo = document.createElement("div");
+      titulo.className = "estiba-load-title";
+      titulo.textContent = "Contenedores asignados";
+      const listado = construirContenedores(contenedores);
+      listado.classList.add("estiba-load-grid");
+      carga.appendChild(titulo);
+      carga.appendChild(listado);
+    } else {
+      const vacio = document.createElement("div");
+      vacio.className = "shelf-empty";
+      vacio.textContent = "Sin contenedores registrados.";
+      carga.appendChild(vacio);
+    }
+
+    card.appendChild(carga);
+    return card;
+  }
+
   function calcularResumenEstante(estante) {
     const paneles = filtrarPorTipo(estante, "PANEL");
     let divisiones = 0;
@@ -372,19 +436,32 @@ function construirNivelBase(estante, contenedores) {
         : estante.numero != null
           ? `#${estante.numero}`
           : "";
-    titulo.innerHTML = `${escaparHtml(estante.nombre || "Estante")} <small>${escaparHtml(
+    const nombreBase = estante.nombre || estante.tipo_display || "Ubicacion";
+    titulo.innerHTML = `${escaparHtml(nombreBase)} <small>${escaparHtml(
       codigo,
     )}</small>`;
 
     const resumen = document.createElement("div");
     resumen.className = "estante-summary";
-    resumen.textContent = `${datos.panelesCantidad} ${
-      datos.panelesCantidad === 1 ? "panel" : "paneles"
-    }${BULLET}${datos.divisionesCantidad} ${
-      datos.divisionesCantidad === 1 ? "division" : "divisiones"
-    }${BULLET}${datos.contenedoresCantidad} ${
-      datos.contenedoresCantidad === 1 ? "contenedor" : "contenedores"
-    }`;
+    const partesResumen = [];
+    if (estante.tipo !== "ESTIBA") {
+      partesResumen.push(
+        `${datos.panelesCantidad} ${
+          datos.panelesCantidad === 1 ? "panel" : "paneles"
+        }`,
+      );
+      partesResumen.push(
+        `${datos.divisionesCantidad} ${
+          datos.divisionesCantidad === 1 ? "division" : "divisiones"
+        }`,
+      );
+    }
+    partesResumen.push(
+      `${datos.contenedoresCantidad} ${
+        datos.contenedoresCantidad === 1 ? "contenedor" : "contenedores"
+      }`,
+    );
+    resumen.textContent = partesResumen.join(BULLET).trim();
 
     header.appendChild(titulo);
     header.appendChild(resumen);
@@ -408,7 +485,45 @@ function construirNivelBase(estante, contenedores) {
     return stat;
   }
 
+  function construirEstibaGeneral(estiba) {
+    const card = document.createElement("div");
+    card.className = "estante-card estante-card--general estante-card--estiba-general";
+
+    const datos = calcularResumenEstante(estiba);
+    const header = crearEncabezadoEstante(estiba, datos);
+    card.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "estiba-general-body";
+
+    const icono = document.createElement("div");
+    icono.className = "estiba-icon";
+    for (let index = 0; index < 4; index += 1) {
+      const liston = document.createElement("span");
+      liston.className = "estiba-icon-plank";
+      icono.appendChild(liston);
+    }
+    body.appendChild(icono);
+
+    const statsWrap = document.createElement("div");
+    statsWrap.className = "estiba-general-stats";
+    statsWrap.appendChild(
+      crearEstanteGeneralStat(
+        datos.contenedoresCantidad,
+        datos.contenedoresCantidad === 1 ? "Contenedor" : "Contenedores",
+      ),
+    );
+    body.appendChild(statsWrap);
+
+    card.appendChild(body);
+    return card;
+  }
+
   function construirEstante(estante) {
+    if (estante.tipo === "ESTIBA") {
+      return construirEstibaDetalle(estante);
+    }
+
     const card = document.createElement("div");
     card.className = "estante-card";
 
@@ -444,9 +559,9 @@ function construirNivelBase(estante, contenedores) {
     const niveles = document.createElement("div");
     niveles.className = "shelf-level-stack";
 
-    const contenedoresEstante = filtrarPorTipo(estante, "CONTENEDOR");
-    if (contenedoresEstante.length) {
-      niveles.appendChild(construirNivelBase(estante, contenedoresEstante));
+    const contenedoresBase = filtrarPorTipo(estante, "CONTENEDOR");
+    if (contenedoresBase.length) {
+      niveles.appendChild(construirNivelBase(estante, contenedoresBase));
     }
 
     const panelesOrdenados = datos.paneles.slice().sort(ordenarUbicaciones);
@@ -464,7 +579,10 @@ function construirNivelBase(estante, contenedores) {
     } else {
       const vacio = document.createElement("div");
       vacio.className = "shelf-empty";
-      vacio.textContent = "Sin paneles ni contenedores registrados.";
+      vacio.textContent =
+        estante.tipo === "ESTIBA"
+          ? "Sin contenedores registrados."
+          : "Sin paneles ni contenedores registrados.";
       frame.appendChild(vacio);
     }
 
@@ -473,6 +591,10 @@ function construirNivelBase(estante, contenedores) {
   }
 
   function construirEstanteGeneral(estante) {
+    if (estante.tipo === "ESTIBA") {
+      return construirEstibaGeneral(estante);
+    }
+
     const card = document.createElement("div");
     card.className = "estante-card estante-card--general";
 
@@ -490,18 +612,20 @@ function construirNivelBase(estante, contenedores) {
     const statsWrap = document.createElement("div");
     statsWrap.className = "estante-general-stats";
 
-    statsWrap.appendChild(
-      crearEstanteGeneralStat(
-        datos.panelesCantidad,
-        datos.panelesCantidad === 1 ? "Panel" : "Paneles",
-      ),
-    );
-    statsWrap.appendChild(
-      crearEstanteGeneralStat(
-        datos.divisionesCantidad,
-        datos.divisionesCantidad === 1 ? "Division" : "Divisiones",
-      ),
-    );
+    if (estante.tipo !== "ESTIBA") {
+      statsWrap.appendChild(
+        crearEstanteGeneralStat(
+          datos.panelesCantidad,
+          datos.panelesCantidad === 1 ? "Panel" : "Paneles",
+        ),
+      );
+      statsWrap.appendChild(
+        crearEstanteGeneralStat(
+          datos.divisionesCantidad,
+          datos.divisionesCantidad === 1 ? "Division" : "Divisiones",
+        ),
+      );
+    }
     statsWrap.appendChild(
       crearEstanteGeneralStat(
         datos.contenedoresCantidad,
@@ -533,7 +657,7 @@ function construirNivelBase(estante, contenedores) {
     titulo.textContent = bodega.nombre || "Bodega";
     const resumen = document.createElement("span");
     resumen.textContent = `${bodega.estantes.length} ${
-      bodega.estantes.length === 1 ? "estante" : "estantes"
+      bodega.estantes.length === 1 ? "estante/estiba" : "estantes/estibas"
     }`;
     header.appendChild(titulo);
     header.appendChild(resumen);
@@ -549,7 +673,7 @@ function construirNivelBase(estante, contenedores) {
     if (!estantesOrdenados.length) {
       const vacio = document.createElement("div");
       vacio.className = "shelf-empty";
-      vacio.textContent = "Esta bodega no tiene estanterias configuradas todavia.";
+      vacio.textContent = "Esta bodega no tiene ubicaciones de nivel 1 configuradas todavia.";
       contenido.appendChild(vacio);
     } else {
       const grid = document.createElement("div");
@@ -596,7 +720,7 @@ function construirNivelBase(estante, contenedores) {
     mapaResumen.innerHTML = `
       <strong>${escaparHtml(bodega.nombre || "Bodega")}</strong>${BULLET}
       ${bodega.estantes.length} ${
-        bodega.estantes.length === 1 ? "estante" : "estantes"
+        bodega.estantes.length === 1 ? "estante/estiba" : "estantes/estibas"
       }${BULLET}
       ${panelesTotal} ${panelesTotal === 1 ? "panel" : "paneles"}${BULLET}
       ${divisionesTotal} ${
@@ -625,7 +749,7 @@ function construirNivelBase(estante, contenedores) {
 
   function renderSeleccion() {
     if (!state.seleccionada || !state.bodegasAgrupadas.has(state.seleccionada)) {
-      mostrarEmptyState("Selecciona una bodega para visualizar sus estanterias.");
+      mostrarEmptyState("Selecciona una bodega para visualizar sus ubicaciones de nivel 1.");
       return;
     }
 

@@ -16,12 +16,14 @@ class Bodega(models.Model):
 class Ubicacion(models.Model):
     class Tipo(models.TextChoices):
         ESTANTE = "ESTANTE", "Estante"
+        ESTIBA = "ESTIBA", "Estiba"
         PANEL = "PANEL", "Panel"
         DIVISION = "DIVISION", "Division"
         CONTENEDOR = "CONTENEDOR", "Contenedor"
 
     NIVEL_MAP = {
         Tipo.ESTANTE: 1,
+        Tipo.ESTIBA: 1,
         Tipo.PANEL: 2,
         Tipo.DIVISION: 3,
         Tipo.CONTENEDOR: 4,
@@ -29,9 +31,10 @@ class Ubicacion(models.Model):
 
     PADRES_VALIDOS = {
         Tipo.ESTANTE: {None},
+        Tipo.ESTIBA: {None},
         Tipo.PANEL: {Tipo.ESTANTE},
         Tipo.DIVISION: {Tipo.PANEL},
-        Tipo.CONTENEDOR: {None, Tipo.PANEL, Tipo.DIVISION},
+        Tipo.CONTENEDOR: {None, Tipo.ESTANTE, Tipo.ESTIBA, Tipo.PANEL, Tipo.DIVISION},
     }
 
     id = models.AutoField(primary_key=True)
@@ -90,9 +93,12 @@ class Ubicacion(models.Model):
         if padre_tipo not in tipos_validos:
             mensajes = {
                 self.Tipo.ESTANTE: "Un estante no puede tener padre.",
+                self.Tipo.ESTIBA: "Una estiba no puede tener padre.",
                 self.Tipo.PANEL: "Un panel debe pertenecer a un estante.",
                 self.Tipo.DIVISION: "Una division debe pertenecer a un panel.",
-                self.Tipo.CONTENEDOR: "Un contenedor debe pertenecer a un panel o division, o quedar sin padre.",
+                self.Tipo.CONTENEDOR: (
+                    "Un contenedor debe pertenecer a un estante, estiba, panel o division, o quedar sin padre."
+                ),
             }
             raise ValidationError({"padre": mensajes.get(tipo, "Padre invalido para este tipo.")})
 
@@ -122,7 +128,7 @@ class Ubicacion(models.Model):
     @classmethod
     def scope_queryset(cls, tipo, padre_id=None, bodega_id=None):
         qs = cls.objects.filter(tipo=tipo)
-        if tipo == cls.Tipo.ESTANTE:
+        if tipo in (cls.Tipo.ESTANTE, cls.Tipo.ESTIBA):
             qs = qs.filter(bodega_id=bodega_id)
         elif tipo in (cls.Tipo.PANEL, cls.Tipo.DIVISION):
             qs = qs.filter(padre_id=padre_id)
@@ -135,7 +141,7 @@ class Ubicacion(models.Model):
 
     @classmethod
     def _scope_inicio(cls, tipo):
-        return 100 if tipo == cls.Tipo.ESTANTE else 1
+        return 100 if tipo in (cls.Tipo.ESTANTE, cls.Tipo.ESTIBA) else 1
 
     @classmethod
     def recalcular_scope(cls, tipo, padre_id=None, bodega_id=None):

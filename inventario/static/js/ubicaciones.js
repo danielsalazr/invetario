@@ -47,6 +47,12 @@
     initialized: false,
   };
 
+  const TIPOS_BASE = new Set(["ESTANTE", "ESTIBA"]);
+
+  function esTipoNivelBase(tipo) {
+    return TIPOS_BASE.has(tipo);
+  }
+
   function normalizarId(valor) {
     if (valor === null || valor === undefined) {
       return null;
@@ -91,16 +97,16 @@
   }
 
   function sincronizarExpansiones() {
-    const estantes = state.arbol.filter(
-      (nodo) => nodo && nodo.tipo === "ESTANTE",
+    const bases = state.arbol.filter(
+      (nodo) => nodo && esTipoNivelBase(nodo.tipo),
     );
-    const estanteIds = new Set(estantes.map((nodo) => nodo.id));
+    const baseIds = new Set(bases.map((nodo) => nodo.id));
     const bodegaIds = new Set(
-      estantes.map((nodo) => nodo.bodega).filter((id) => id !== undefined),
+      bases.map((nodo) => nodo.bodega).filter((id) => id !== undefined),
     );
 
     if (!state.initialized) {
-      state.expandedEstantes = new Set(estanteIds);
+      state.expandedEstantes = new Set(baseIds);
       state.expandedBodegas = new Set(bodegaIds);
       state.initialized = true;
       return;
@@ -108,14 +114,14 @@
 
     const prevEstantes = new Set(state.expandedEstantes);
     state.expandedEstantes = new Set(
-      [...prevEstantes].filter((id) => estanteIds.has(id)),
+      [...prevEstantes].filter((id) => baseIds.has(id)),
     );
     if (!prevEstantes.size) {
-      estanteIds.forEach((id) => {
+      baseIds.forEach((id) => {
         state.expandedEstantes.add(id);
       });
     } else {
-      estanteIds.forEach((id) => {
+      baseIds.forEach((id) => {
         if (!prevEstantes.has(id)) {
           state.expandedEstantes.add(id);
         }
@@ -316,7 +322,7 @@
           <span>${padreEscapado}</span>
         </div>
         <div class="detail-row">
-          <span>Descripción</span>
+          <span>Descripcion</span>
           <span>${descripcionEscapada}</span>
         </div>
         <div class="detail-row">
@@ -338,8 +344,8 @@
       </div>
       <div class="physical-wrapper">
         <div class="physical-header">
-          <span class="physical-title">Vista física</span>
-          <span>Estante &gt; Panel &gt; División &gt; Contenedor</span>
+          <span class="physical-title">Vista fisica</span>
+          <span>Nivel 1 (Estante/Estiba) &gt; Panel &gt; Division &gt; Contenedor</span>
         </div>
         <div class="physical-canvas" id="vistaFisica"></div>
       </div>
@@ -403,7 +409,7 @@
   function obtenerEstanteBase(nodo) {
     let actual = nodo;
     while (actual) {
-      if (actual.tipo === "ESTANTE") {
+      if (esTipoNivelBase(actual.tipo)) {
         return actual;
       }
       if (!actual.padre) {
@@ -411,7 +417,7 @@
       }
       actual = state.mapa.get(normalizarId(actual.padre));
     }
-    return actual && actual.tipo === "ESTANTE" ? actual : null;
+    return actual && esTipoNivelBase(actual.tipo) ? actual : null;
   }
 
   function construirContenedoresHtml(contenedores, rutaIds, seleccionadoId) {
@@ -448,34 +454,39 @@
     if (!nodo) {
       contenedor.innerHTML = `
         <div class="physical-empty">
-          Selecciona una ubicación para visualizar su estructura física.
+          Selecciona una ubicacion para visualizar su estructura fisica.
         </div>
       `;
       return;
     }
 
-    const estante = obtenerEstanteBase(nodo);
-    if (!estante) {
+    const base = obtenerEstanteBase(nodo);
+    if (!base) {
       contenedor.innerHTML = `
         <div class="physical-empty">
-          Esta ubicación no está asociada a un estante configurado.
+          Esta ubicacion no esta asociada a una ubicacion base (estante o estiba).
         </div>
       `;
       return;
     }
+
+    const esEstibaBase = base.tipo === "ESTIBA";
+    const etiquetaBase = esEstibaBase ? "estiba" : "estante";
+    const articuloBase = esEstibaBase ? "La" : "El";
+    const articuloBaseMin = esEstibaBase ? "la" : "el";
 
     const rutaIds = obtenerRutaIds(nodo);
     const seleccionadoId = normalizarId(nodo.id);
-    const panelesFuente = Array.isArray(estante.hijos)
-      ? estante.hijos.filter((hijo) => hijo.tipo === "PANEL")
+    const panelesFuente = Array.isArray(base.hijos)
+      ? base.hijos.filter((hijo) => hijo.tipo === "PANEL")
       : [];
     const paneles = panelesFuente.slice().sort(ordenarUbicaciones);
-    const contenedoresEstante = Array.isArray(estante.hijos)
-      ? estante.hijos.filter((hijo) => hijo.tipo === "CONTENEDOR")
+    const contenedoresBase = Array.isArray(base.hijos)
+      ? base.hijos.filter((hijo) => hijo.tipo === "CONTENEDOR")
       : [];
 
     let totalDivisiones = 0;
-    let totalContenedores = contenedoresEstante.length;
+    let totalContenedores = contenedoresBase.length;
 
     const panelesOrdenados = paneles.slice().sort(ordenarUbicaciones).reverse();
     const panelesHtml = panelesOrdenados
@@ -544,26 +555,32 @@
       .join("");
 
     const totalPaneles = paneles.length;
+    const resumenPartes = [];
+    if (!esEstibaBase) {
+      resumenPartes.push(
+        `${totalPaneles} ${totalPaneles === 1 ? "panel" : "paneles"}`,
+      );
+      resumenPartes.push(
+        `${totalDivisiones} ${totalDivisiones === 1 ? "division" : "divisiones"}`,
+      );
+    }
+    resumenPartes.push(
+      `${totalContenedores} ${totalContenedores === 1 ? "contenedor" : "contenedores"}`,
+    );
     const resumen = `
       <div class="physical-summary">
-        <strong>${escaparHtml(estante.nombre)}</strong>
-        <span>
-          ${totalPaneles} ${totalPaneles === 1 ? "panel" : "paneles"}
-          &middot;
-          ${totalDivisiones} ${totalDivisiones === 1 ? "división" : "divisiones"}
-          &middot;
-          ${totalContenedores} ${totalContenedores === 1 ? "contenedor" : "contenedores"}
-        </span>
+        <strong>${escaparHtml(base.nombre)}</strong>
+        <span>${resumenPartes.join(" &middot; ")}</span>
       </div>
     `;
 
-    const directSection = contenedoresEstante.length
+    const directSection = contenedoresBase.length
       ? `<div class="physical-direct">
            <div class="physical-division-title">
-             <span>Contenedores en el estante</span>
-             <span>${escaparHtml(estante.nomenclatura || estante.numero || "")}</span>
+             <span>Contenedores en ${articuloBaseMin} ${etiquetaBase}</span>
+             <span>${escaparHtml(base.nomenclatura || base.numero || "")}</span>
            </div>
-           ${construirContenedoresHtml(contenedoresEstante, rutaIds, seleccionadoId)}
+           ${construirContenedoresHtml(contenedoresBase, rutaIds, seleccionadoId)}
          </div>`
       : "";
 
@@ -573,8 +590,11 @@
     } else if (directSection) {
       contenidoPrincipal = directSection;
     } else {
+      const mensajeBase = esEstibaBase
+        ? `${articuloBase} ${etiquetaBase} aun no tiene contenedores asignados.`
+        : `${articuloBase} ${etiquetaBase} aun no tiene paneles ni contenedores asignados.`;
       contenidoPrincipal = `<div class="physical-empty">
-        El estante aún no tiene paneles ni contenedores asignados.
+        ${mensajeBase}
       </div>`;
     }
 
@@ -626,9 +646,9 @@
         ? nodo.numero
         : "?";
     const hijosLabel = Array.isArray(nodo.hijos) ? nodo.hijos.length : 0;
-    const esEstante = nodo.tipo === "ESTANTE";
+    const esBase = esTipoNivelBase(nodo.tipo);
     const tieneHijos = hijosLabel > 0;
-    const puedeContraer = esEstante && tieneHijos;
+    const puedeContraer = esBase && tieneHijos;
     const estaExpandido =
       forceExpand || !puedeContraer || state.expandedEstantes.has(nodo.id);
 
@@ -639,7 +659,7 @@
       toggleBtn.textContent = estaExpandido ? "-" : "+";
       toggleBtn.setAttribute(
         "aria-label",
-        `${estaExpandido ? "Colapsar" : "Expandir"} estante ${nodo.nombre}`,
+        `${estaExpandido ? "Colapsar" : "Expandir"} ${nodo.tipo_display} ${nodo.nombre}`,
       );
       toggleBtn.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -758,15 +778,15 @@
 
     const cantidad = document.createElement("span");
     cantidad.className = "tag";
-    const estantesCount = nodosGrupo.filter(
-      (nodo) => nodo.tipo === "ESTANTE",
+    const basesCount = nodosGrupo.filter(
+      (nodo) => esTipoNivelBase(nodo.tipo),
     ).length;
     const total = nodosGrupo.length;
     let etiquetaCantidad;
     let cantidadMostrar;
-    if (estantesCount === total) {
-      cantidadMostrar = estantesCount;
-      etiquetaCantidad = estantesCount === 1 ? "estante" : "estantes";
+    if (basesCount === total) {
+      cantidadMostrar = basesCount;
+      etiquetaCantidad = basesCount === 1 ? "estante/estiba" : "estantes/estibas";
     } else {
       cantidadMostrar = total;
       etiquetaCantidad = total === 1 ? "ubicacion" : "ubicaciones";
@@ -835,7 +855,7 @@
 
     let actual = nodo;
     while (actual) {
-      if (actual.tipo === "ESTANTE") {
+      if (esTipoNivelBase(actual.tipo)) {
         state.expandedEstantes.add(actual.id);
       }
       if (!actual.padre) break;
