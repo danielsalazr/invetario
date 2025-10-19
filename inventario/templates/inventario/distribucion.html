@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+{% load static %}
+{% block container %}
+
+<style>
+  .layout-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 2rem 3vw;
+  }
+
+  .layout-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem 1.5rem;
+  }
+
+  .layout-header h1 {
+    margin: 0;
+    font-size: 1.85rem;
+    font-weight: 700;
+  }
+
+  .layout-header select,
+  .layout-header input[type="number"] {
+    border-radius: 10px;
+    border: 1px solid #cbd5f5;
+    padding: 0.55rem 0.8rem;
+    min-width: 220px;
+    font-size: 0.95rem;
+  }
+
+  .layout-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .layout-controls button {
+    border-radius: 10px;
+    border: 1px solid rgba(37, 99, 235, 0.35);
+    background: #2563eb;
+    color: #fff;
+    padding: 0.55rem 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+
+  .layout-controls button[disabled] {
+    cursor: not-allowed;
+    opacity: 0.6;
+    background: rgba(148, 163, 184, 0.4);
+    border-color: rgba(148, 163, 184, 0.6);
+  }
+
+  .layout-controls button:not([disabled]):hover {
+    background: #1d4ed8;
+    transform: translateY(-1px);
+  }
+
+  .canvas-wrapper {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .canvas-panel {
+    flex: 1 1 620px;
+    background: #fff;
+    border-radius: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    box-shadow: 0 16px 45px -34px rgba(15, 23, 42, 0.55);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    min-height: 420px;
+  }
+
+  .canvas-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1rem;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .canvas-toolbar-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+  }
+
+  .canvas-grid {
+    flex: 1;
+    position: relative;
+    background:
+      repeating-linear-gradient(
+        0deg,
+        rgba(226, 232, 240, 0.6),
+        rgba(226, 232, 240, 0.6) 2px,
+        rgba(241, 245, 249, 0.8) 2px,
+        rgba(241, 245, 249, 0.8) var(--cell-size, 120px)
+      ),
+      repeating-linear-gradient(
+        90deg,
+        rgba(226, 232, 240, 0.6),
+        rgba(226, 232, 240, 0.6) 2px,
+        rgba(241, 245, 249, 0.8) 2px,
+        rgba(241, 245, 249, 0.8) var(--cell-size, 120px)
+      );
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    overflow: auto;
+    padding: 1.2rem;
+  }
+
+  .canvas-grid-inner {
+    display: grid;
+    gap: 0.65rem;
+    grid-template-columns: repeat(var(--cols, 8), var(--cell-size, 120px));
+    grid-auto-rows: var(--cell-size, 120px);
+    position: relative;
+  }
+
+  .canvas-grid.is-loading::after {
+    content: "Cargando distribución...";
+    position: absolute;
+    inset: 0;
+    background: rgba(255, 255, 255, 0.76);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    color: #2563eb;
+    letter-spacing: 0.05em;
+    border-radius: 14px;
+    z-index: 10;
+  }
+
+  .grid-cell {
+    background: rgba(248, 250, 252, 0.65);
+    border-radius: 10px;
+    border: 1px dashed rgba(148, 163, 184, 0.6);
+    position: relative;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .grid-cell[data-drop="true"] {
+    border-style: solid;
+    border-color: rgba(37, 99, 235, 0.55);
+    box-shadow: 0 0 12px rgba(37, 99, 235, 0.25);
+  }
+
+  .grid-item {
+    position: absolute;
+    inset: 6px;
+    border-radius: 10px;
+    background: linear-gradient(145deg, #2563eb 0%, #1d4ed8 100%);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: stretch;
+    padding: 0.65rem;
+    box-shadow:
+      0 10px 24px -18px rgba(37, 99, 235, 0.8),
+      inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    cursor: grab;
+    user-select: none;
+  }
+
+  .grid-item[data-tipo="ESTIBA"] {
+    background: linear-gradient(145deg, #d97706 0%, #b45309 100%);
+  }
+
+  .grid-item[data-tipo="PASILLO"] {
+    background: linear-gradient(145deg, #475569 0%, #1f2937 100%);
+  }
+
+  .grid-item-remove {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, 0.35);
+    color: #fff;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  .grid-item-remove:hover {
+    background: rgba(220, 38, 38, 0.8);
+  }
+
+  .grid-item:active {
+    cursor: grabbing;
+  }
+
+  .grid-item strong {
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+
+  .grid-item span {
+    font-size: 0.72rem;
+    opacity: 0.85;
+  }
+
+  .layout-sidebar {
+    flex: 0 0 280px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .layout-sidebar section {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    padding: 1.2rem;
+    box-shadow: 0 16px 45px -34px rgba(15, 23, 42, 0.55);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .layout-sidebar h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #1f2937;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    font-size: 0.85rem;
+    color: #475569;
+  }
+
+  .legend-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 6px;
+  }
+
+  .legend-swatch--estante {
+    background: linear-gradient(145deg, #2563eb 0%, #1d4ed8 100%);
+  }
+
+  .legend-swatch--estiba {
+    background: linear-gradient(145deg, #d97706 0%, #b45309 100%);
+  }
+
+  .summary-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    color: #475569;
+  }
+
+  .summary-list strong {
+    display: inline-block;
+    min-width: 110px;
+    color: #1f2937;
+  }
+
+  @media (max-width: 1024px) {
+    .canvas-panel {
+      flex-basis: 100%;
+    }
+
+    .layout-sidebar {
+      flex-basis: 100%;
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+
+    .layout-sidebar section {
+      flex: 1 1 240px;
+    }
+  }
+</style>
+
+<section class="layout-editor">
+  <header class="layout-header">
+    <div>
+      <h1>Distribución física por bodega</h1>
+      <p class="form-description">
+        Ordena estantes y estibas en un lienzo cuadriculado, arrástralos para definir su posición y guarda la distribución por bodega.
+      </p>
+    </div>
+    <select id="selectorBodega">
+      <option value="">Selecciona una bodega…</option>
+      {% for bodega in bodegas %}
+        <option value="{{ bodega.id }}">{{ bodega.nombre }}</option>
+      {% endfor %}
+    </select>
+    <div class="layout-controls">
+      <button type="button" id="guardarDistribucion" disabled>Guardar distribución</button>
+    </div>
+  </header>
+
+    <div class="canvas-wrapper">
+      <section class="canvas-panel">
+        <div class="canvas-toolbar">
+          <div class="canvas-toolbar-group">
+            <label for="columnasInput">Columnas</label>
+            <input type="number" id="columnasInput" min="1" value="8" />
+            <label for="filasInput">Filas</label>
+            <input type="number" id="filasInput" min="1" value="6" />
+          </div>
+          <div class="canvas-toolbar-group">
+            <button type="button" id="agregarPasillo">Agregar pasillo</button>
+            <label for="tamanoCelda">Tamaño celdas</label>
+            <input type="range" id="tamanoCelda" min="80" max="200" value="120" />
+          </div>
+        </div>
+
+        <div class="canvas-grid" id="canvasGrid">
+          <div class="canvas-grid-inner" id="gridInner"></div>
+        </div>
+      </section>
+
+      <aside class="layout-sidebar">
+        <section>
+          <h3>Referencias</h3>
+          <div class="legend-item">
+            <span class="legend-swatch legend-swatch--estante"></span>
+            Estante (nivel 1)
+          </div>
+          <div class="legend-item">
+            <span class="legend-swatch legend-swatch--estiba"></span>
+            Estiba (nivel 1)
+          </div>
+          <div class="legend-item">
+            <span class="legend-swatch" style="background: linear-gradient(145deg, #475569 0%, #1f2937 100%);"></span>
+            Pasillo
+          </div>
+        </section>
+
+        <section>
+          <h3>Resumen de la distribución</h3>
+          <div class="summary-list" id="resumenDistribucion">
+            <div><strong>Bodega:</strong> —</div>
+            <div><strong>Total ubicaciones:</strong> 0</div>
+            <div><strong>Filas x columnas:</strong> 0 × 0</div>
+          </div>
+        </section>
+      </aside>
+    </div>
+</section>
+
+<script>
+  window.distribucionConfig = {
+    endpoints: {
+      bodegas: "{% url 'bodegas_api' %}",
+      distribucion: "{% url 'ubicaciones_distribucion_api' %}",
+    },
+  };
+</script>
+
+<script src="{% static 'js/sweetAlert.js' %}"></script>
+<script src="{% static 'js/distribucion.js' %}"></script>
+
+{% endblock container %}

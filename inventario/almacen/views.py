@@ -16,6 +16,8 @@ from .models import (
     Marca,
     UnidadMedida,
     Ubicacion,
+    PlanoDistribucion,
+    DistribucionUbicacion,
 )
 from .serializers import (
     ArticuloSerializer,
@@ -31,6 +33,15 @@ from .serializers import (
 
 def articulo(request):
     return render(request, "inventario/index.html", {})
+
+
+def distribucion_ubicaciones(request):
+    bodegas = Bodega.objects.order_by("nombre")
+    return render(
+        request,
+        "inventario/distribucion.html",
+        {"bodegas": bodegas},
+    )
 
 
 class Articulos(APIView):
@@ -363,4 +374,303 @@ class CrearEstantesLoteView(APIView):
                 "estantes": estantes_creados,
             },
             status=status.HTTP_201_CREATED,
+        )
+
+
+class PlanoDistribucionView(APIView):
+    def get(self, request):
+        bodega_id = request.GET.get("bodega")
+        if not bodega_id:
+            return Response(
+                {"detail": "Debes seleccionar una bodega."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        bodega = get_object_or_404(Bodega, pk=bodega_id)
+
+        plano, _ = PlanoDistribucion.objects.get_or_create(bodega=bodega)
+
+        ubicaciones_qs = (
+            Ubicacion.objects.filter(bodega=bodega, nivel=1)
+            .order_by("numero", "nombre")
+            .only("id", "nombre", "tipo", "nomenclatura")
+        )
+
+        distribuciones = list(
+            plano.distribuciones.select_related("ubicacion").order_by("fila", "columna")
+        )
+
+        mapa_existentes = {
+            dist.ubicacion_id: dist
+            for dist in distribuciones
+            if not dist.es_pasillo and dist.ubicacion_id
+        }
+
+        items = []
+
+        # Agregar pasillos existentes
+        for distribucion in distribuciones:
+            if distribucion.es_pasillo:
+                items.append(
+                    {
+                        "id": distribucion.id,
+                        "nombre": distribucion.nombre_pasillo or "Pasillo",
+                        "tipo": "PASILLO",
+                        "es_pasillo": True,
+                        "fila": distribucion.fila,
+                        "columna": distribucion.columna,
+                        "ancho": distribucion.ancho,
+                        "alto": distribucion.alto,
+                    }
+                )
+
+        # Agregar ubicaciones
+        for indice, ubicacion in enumerate(ubicaciones_qs):
+            distribucion = mapa_existentes.get(ubicacion.id)
+            if distribucion:
+                fila = distribucion.fila
+                columna = distribucion.columna
+                ancho = distribucion.ancho
+                alto = distribucion.alto
+            else:
+                fila = (indice // plano.columnas) + 1
+                columna = (indice % plano.columnas) + 1
+                ancho = 1
+                alto = 1
+            items.append(
+                {
+                    "id": ubicacion.id,
+                    "nombre": ubicacion.nombre,
+                    "tipo": ubicacion.tipo,
+                    "nomenclatura": ubicacion.nomenclatura,
+                    "fila": fila,
+                    "columna": columna,
+                    "ancho": ancho,
+                    "alto": alto,
+                    "es_pasillo": False,
+                },
+            )
+
+        plano.ajustar_dimensiones_si_necesario(len(items))
+        plano.save(update_fields=["filas", "columnas", "tamano_celda", "actualizado_en"])
+
+        items.sort(key=lambda item: (item["fila"], item["columna"]))
+
+        return Response(
+            {
+                "bodega": {"id": bodega.id, "nombre": bodega.nombre},
+                "canvas": {
+                    "rows": plano.filas,
+                    "cols": plano.columnas,
+                    "cell_size": plano.tamano_celda,
+                },
+                "items": items,
+                "plano_id": plano.id,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def post(self, request):
+        data = request.data
+        bodega_id = data.get("bodega")
+        if not bodega_id:
+            return Response(
+                {"detail": "Es necesario indicar la bodega."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        bodega = get_object_or_404(Bodega, pk=bodega_id)
+        plano, _ = PlanoDistribucion.objects.get_or_create(bodega=bodega)
+
+        canvas = data.get("canvas") or {}
+        filas = int(canvas.get("rows") or plano.filas or 1)
+        columnas = int(canvas.get("cols") or plano.columnas or 1)
+        tamano_celda = int(canvas.get("cell_size") or plano.tamano_celda or 120)
+
+        items = data.get("items") or []
+        if not isinstance(items, list):
+            return Response(
+                {"detail": "El formato de elementos es invalido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ubicaciones_validas = set(
+            Ubicacion.objects.filter(bodega=bodega, nivel=1).values_list("id", flat=True)
+        )
+
+        if not ubicaciones_validas:
+            return Response(
+                {"detail": "La bodega seleccionada no tiene ubicaciones de nivel 1."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        registros_ubicaciones = []
+        registros_pasillos = []
+        max_fila = filas
+        max_columna = columnas
+        vistos = set()
+        pasillos_ids = set()
+
+        for indice, item in enumerate(items):
+            fila = item.get("fila")
+            columna = item.get("columna")
+
+            if fila is None or columna is None:
+                fila = (indice // columnas) + 1
+                columna = (indice % columnas) + 1
+
+            try:
+                fila = int(fila)
+                columna = int(columna)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": "Las filas y columnas deben ser numeros enteros."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            max_fila = max(max_fila, fila)
+            max_columna = max(max_columna, columna)
+
+            if item.get("es_pasillo"):
+                pasillos_ids.add(item.get("id"))
+                registros_pasillos.append(
+                    {
+                        "id": item.get("id"),
+                        "nombre": item.get("nombre") or "Pasillo",
+                        "fila": fila,
+                        "columna": columna,
+                        "ancho": int(item.get("ancho") or 1),
+                        "alto": int(item.get("alto") or 1),
+                    }
+                )
+                continue
+
+            ubicacion_id = item.get("id") or item.get("ubicacion")
+            if ubicacion_id is None:
+                return Response(
+                    {"detail": f"El elemento en la posicion {indice + 1} no tiene una ubicacion asociada."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            try:
+                ubicacion_id = int(ubicacion_id)
+            except (TypeError, ValueError):
+                return Response(
+                    {"detail": f"La ubicacion indicada en la posicion {indice + 1} es invalida."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if ubicacion_id not in ubicaciones_validas:
+                return Response(
+                    {"detail": f"La ubicacion {ubicacion_id} no pertenece a la bodega seleccionada."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if ubicacion_id in vistos:
+                return Response(
+                    {"detail": "Hay ubicaciones duplicadas en la distribucion."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            vistos.add(ubicacion_id)
+
+            registros_ubicaciones.append(
+                {
+                    "ubicacion_id": ubicacion_id,
+                    "fila": fila,
+                    "columna": columna,
+                    "ancho": int(item.get("ancho") or 1),
+                    "alto": int(item.get("alto") or 1),
+                }
+            )
+
+        filas = max(filas, max_fila)
+        columnas = max(columnas, max_columna)
+
+        with transaction.atomic():
+            plano.filas = max(1, filas)
+            plano.columnas = max(1, columnas)
+            plano.tamano_celda = max(64, tamano_celda)
+            plano.save()
+
+            distribuciones = list(plano.distribuciones.select_for_update())
+            existentes = {
+                distribucion.ubicacion_id: distribucion
+                for distribucion in distribuciones
+                if not distribucion.es_pasillo and distribucion.ubicacion_id
+            }
+            pasillos_existentes = {
+                distribucion.id: distribucion
+                for distribucion in distribuciones
+                if distribucion.es_pasillo
+            }
+
+            ids_actuales = set()
+            for registro in registros_ubicaciones:
+                distribucion = existentes.get(registro["ubicacion_id"])
+                if distribucion:
+                    distribucion.fila = registro["fila"]
+                    distribucion.columna = registro["columna"]
+                    distribucion.ancho = max(1, registro["ancho"])
+                    distribucion.alto = max(1, registro["alto"])
+                    distribucion.save()
+                else:
+                    DistribucionUbicacion.objects.create(
+                        plano=plano,
+                        ubicacion_id=registro["ubicacion_id"],
+                        fila=registro["fila"],
+                        columna=registro["columna"],
+                        ancho=max(1, registro["ancho"]),
+                        alto=max(1, registro["alto"]),
+                    )
+                ids_actuales.add(registro["ubicacion_id"])
+
+            eliminar = [
+                distribucion_id
+                for distribucion_id in existentes.keys()
+                if distribucion_id not in ids_actuales
+            ]
+            if eliminar:
+                DistribucionUbicacion.objects.filter(
+                    plano=plano, ubicacion_id__in=eliminar
+                ).delete()
+
+            pasillos_ids_guardados = set()
+            for registro in registros_pasillos:
+                registro_id = registro.get("id")
+                distribucion = pasillos_existentes.get(int(registro_id)) if isinstance(registro_id, int) else None
+                if distribucion:
+                    distribucion.nombre_pasillo = registro["nombre"]
+                    distribucion.fila = registro["fila"]
+                    distribucion.columna = registro["columna"]
+                    distribucion.ancho = max(1, registro["ancho"])
+                    distribucion.alto = max(1, registro["alto"])
+                    distribucion.save(
+                        update_fields=["nombre_pasillo", "fila", "columna", "ancho", "alto", "actualizado_en"]
+                    )
+                    pasillos_ids_guardados.add(distribucion.id)
+                else:
+                    nuevo = DistribucionUbicacion.objects.create(
+                        plano=plano,
+                        es_pasillo=True,
+                        nombre_pasillo=registro["nombre"],
+                        fila=registro["fila"],
+                        columna=registro["columna"],
+                        ancho=max(1, registro["ancho"]),
+                        alto=max(1, registro["alto"]),
+                    )
+                    pasillos_ids_guardados.add(nuevo.id)
+
+            eliminar_pasillos = [
+                distribucion_id
+                for distribucion_id in pasillos_existentes.keys()
+                if distribucion_id not in pasillos_ids_guardados
+            ]
+            if eliminar_pasillos:
+                DistribucionUbicacion.objects.filter(
+                    plano=plano, pk__in=eliminar_pasillos
+                ).delete()
+
+        return Response(
+            {"detail": "Distribucion guardada correctamente."},
+            status=status.HTTP_200_OK,
         )

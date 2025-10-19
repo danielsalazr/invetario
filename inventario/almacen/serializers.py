@@ -296,3 +296,38 @@ class EstantesLoteSerializer(serializers.Serializer):
             )
 
         return attrs
+
+
+class DistribucionUbicacionSerializer(serializers.ModelSerializer):
+    ubicacion_nombre = serializers.CharField(source="ubicacion.nombre", read_only=True)
+    ubicacion_tipo = serializers.CharField(source="ubicacion.tipo", read_only=True)
+    ubicacion_nomenclatura = serializers.CharField(source="ubicacion.nomenclatura", read_only=True)
+    es_pasillo = serializers.BooleanField(read_only=True)
+    nombre_pasillo = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = models.DistribucionUbicacion
+        fields = [
+            "id",
+            "ubicacion",
+            "ubicacion_nombre",
+            "ubicacion_tipo",
+            "ubicacion_nomenclatura",
+            "fila",
+            "columna",
+            "ancho",
+            "alto",
+            "es_pasillo",
+            "nombre_pasillo",
+            "actualizado_en",
+        ]
+        read_only_fields = ["id", "ubicacion_nombre", "ubicacion_tipo", "ubicacion_nomenclatura", "actualizado_en"]
+
+
+class PlanoDistribucionSerializer(serializers.ModelSerializer):
+    distribuciones = DistribucionUbicacionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = models.PlanoDistribucion
+        fields = ["id", "bodega", "filas", "columnas", "tamano_celda", "distribuciones"]
+        read_only_fields = ["id", "bodega", "distribuciones"]

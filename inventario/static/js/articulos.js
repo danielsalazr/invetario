@@ -1422,6 +1422,14 @@
       return;
     }
 
+    if (!state.seleccionUbicacion.bodegaId) {
+      if (typeof swalErr === "function") {
+        swalErr("Selecciona una bodega antes de registrar ingresos.");
+      }
+      bodegaSelect?.focus?.();
+      return;
+    }
+
     if (
       !state.seleccionUbicacion.locked ||
       !state.seleccionUbicacion.ubicacionId

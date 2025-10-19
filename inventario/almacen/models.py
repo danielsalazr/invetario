@@ -220,6 +220,89 @@ class Ubicacion(models.Model):
 
 
 
+class PlanoDistribucion(models.Model):
+    bodega = models.OneToOneField(
+        Bodega,
+        on_delete=models.CASCADE,
+        related_name="plano_distribucion",
+    )
+    filas = models.PositiveIntegerField(default=6)
+    columnas = models.PositiveIntegerField(default=8)
+    tamano_celda = models.PositiveIntegerField(default=120)
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Plano de distribucion"
+        verbose_name_plural = "Planos de distribucion"
+
+    def ajustar_dimensiones_si_necesario(self, cantidad_elementos):
+        if self.columnas < 1:
+            self.columnas = 1
+        filas_necesarias = max(1, (cantidad_elementos + self.columnas - 1) // self.columnas)
+        if self.filas < filas_necesarias:
+            self.filas = filas_necesarias
+
+    def save(self, *args, **kwargs):
+        self.filas = max(1, self.filas or 1)
+        self.columnas = max(1, self.columnas or 1)
+        self.tamano_celda = max(64, self.tamano_celda or 64)
+        super().save(*args, **kwargs)
+
+
+class DistribucionUbicacion(models.Model):
+    plano = models.ForeignKey(
+        PlanoDistribucion,
+        on_delete=models.CASCADE,
+        related_name="distribuciones",
+    )
+    ubicacion = models.OneToOneField(
+        Ubicacion,
+        on_delete=models.CASCADE,
+        related_name="plano_distribucion",
+        null=True,
+        blank=True,
+    )
+    fila = models.PositiveIntegerField(default=1)
+    columna = models.PositiveIntegerField(default=1)
+    ancho = models.PositiveSmallIntegerField(default=1)
+    alto = models.PositiveSmallIntegerField(default=1)
+    actualizado_en = models.DateTimeField(auto_now=True)
+    es_pasillo = models.BooleanField(default=False)
+    nombre_pasillo = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        verbose_name = "Distribucion de ubicacion"
+        verbose_name_plural = "Distribuciones de ubicaciones"
+        ordering = ("fila", "columna")
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        if self.es_pasillo:
+            if not self.nombre_pasillo:
+                raise ValidationError({"nombre_pasillo": "Asigna un nombre o codigo para el pasillo."})
+        else:
+            if not self.ubicacion:
+                raise ValidationError({"ubicacion": "Selecciona la ubicacion vinculada al plano."})
+            if self.ubicacion.nivel != 1:
+                raise ValidationError(
+                    {"ubicacion": "Solo se pueden distribuir ubicaciones de nivel 1 (estantes y estibas)."}
+                )
+            if self.ubicacion.bodega_id != self.plano.bodega_id:
+                raise ValidationError(
+                    {"ubicacion": "La ubicacion debe pertenecer a la misma bodega del plano."}
+                )
+        if self.fila < 1 or self.columna < 1:
+            raise ValidationError({"fila": "Fila y columna deben ser mayores a 0."})
+        if self.ancho < 1 or self.alto < 1:
+            raise ValidationError({"ancho": "El ancho y alto deben ser al menos 1."})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+
+
 class Marca(models.Model):
     id = models.AutoField(primary_key=True)
     nombre = models.CharField(max_length=255, unique=True)

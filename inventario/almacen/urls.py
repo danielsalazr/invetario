@@ -19,6 +19,11 @@ urlpatterns = [
     path("ubicaciones/", views.ubicaciones, name="ubicaciones"),
     path("ubicaciones/mapa/", views.mapa_ubicaciones, name="ubicaciones_mapa"),
     path(
+        "ubicaciones/distribucion/",
+        views.distribucion_ubicaciones,
+        name="ubicaciones_distribucion",
+    ),
+    path(
         "ubicaciones/estantes/lote/",
         views.estantes_lote,
         name="ubicaciones_estantes_lote",
@@ -28,5 +33,10 @@ urlpatterns = [
         "ubicaciones/estantes/lote/api/",
         views.CrearEstantesLoteView.as_view(),
         name="ubicaciones_estantes_lote_api",
+    ),
+    path(
+        "ubicaciones/distribucion/api/",
+        views.PlanoDistribucionView.as_view(),
+        name="ubicaciones_distribucion_api",
     ),
 ]

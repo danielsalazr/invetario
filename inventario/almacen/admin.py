@@ -45,6 +45,21 @@ class UnidadMedidaAdmin(admin.ModelAdmin):
     list_display = ("nombre",)
 
 
+class DistribucionUbicacionInline(admin.TabularInline):
+    model = models.DistribucionUbicacion
+    extra = 0
+    autocomplete_fields = ("ubicacion",)
+    readonly_fields = ("actualizado_en",)
+
+
+@admin.register(models.PlanoDistribucion)
+class PlanoDistribucionAdmin(admin.ModelAdmin):
+    list_display = ("bodega", "filas", "columnas", "tamano_celda", "actualizado_en")
+    search_fields = ("bodega__nombre",)
+    autocomplete_fields = ("bodega",)
+    inlines = [DistribucionUbicacionInline]
+
+
 class FotosInline(admin.StackedInline):
     model = models.FotosArticulos
     extra = 0
