@@ -7,6 +7,7 @@ from django.db.models.functions import Coalesce
 from django.shortcuts import render, get_object_or_404
 
 from rest_framework import status
+from rest_framework.renderers import JSONRenderer
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -47,6 +48,7 @@ def distribucion_ubicaciones(request):
 
 
 class Articulos(APIView):
+    renderer_classes = [JSONRenderer]
     def get(self, request):
         articulos_queryset = (
             Articulo.objects.all()
@@ -114,6 +116,7 @@ class Articulos(APIView):
 
 
 class MarcasView(APIView):
+    renderer_classes = [JSONRenderer]
     def get(self, request):
         marcas = Marca.objects.order_by("nombre")
         serializer = MarcaSerializer(marcas, many=True)
@@ -121,6 +124,7 @@ class MarcasView(APIView):
 
 
 class UnidadesMedidaView(APIView):
+    renderer_classes = [JSONRenderer]
     def get(self, request):
         unidades = UnidadMedida.objects.order_by("nombre")
         serializer = UnidadMedidaSerializer(unidades, many=True)
@@ -128,6 +132,7 @@ class UnidadesMedidaView(APIView):
 
 
 class BodegasView(APIView):
+    renderer_classes = [JSONRenderer]
     def get(self, request):
         bodegas = list(
             Bodega.objects.order_by("nombre").values("id", "nombre"),
@@ -136,6 +141,7 @@ class BodegasView(APIView):
 
 
 class ArticuloInventarioView(APIView):
+    renderer_classes = [JSONRenderer]
     def post(self, request, articulo_id):
         articulo = get_object_or_404(Articulo, pk=articulo_id)
 
@@ -177,6 +183,7 @@ def estantes_lote(request):
 
 
 class UbicacionesView(APIView):
+    renderer_classes = [JSONRenderer]
     def get(self, request):
         bodega_id = request.GET.get("bodega")
         ubicaciones_qs = (
@@ -254,6 +261,7 @@ class UbicacionesView(APIView):
 
 
 class CrearEstantesLoteView(APIView):
+    renderer_classes = [JSONRenderer]
     def post(self, request):
         serializer = EstantesLoteSerializer(data=request.data)
         if not serializer.is_valid():
@@ -380,6 +388,7 @@ class CrearEstantesLoteView(APIView):
 
 
 class PlanoDistribucionView(APIView):
+    renderer_classes = [JSONRenderer]
     def get(self, request):
         bodega_id = request.GET.get("bodega")
         if not bodega_id:
@@ -679,6 +688,7 @@ class PlanoDistribucionView(APIView):
 
 
 class UbicacionInventarioDetalleView(APIView):
+    renderer_classes = [JSONRenderer]
     def get(self, request, ubicacion_id):
         ubicacion = get_object_or_404(
             Ubicacion.objects.select_related("bodega"),

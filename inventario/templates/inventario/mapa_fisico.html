@@ -461,28 +461,20 @@
 
   .map-offcanvas {
     position: fixed;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(440px, 90vw);
     display: flex;
     justify-content: flex-end;
-    pointer-events: none;
     opacity: 0;
+    pointer-events: none;
     transition: opacity 0.2s ease;
     z-index: 1400;
   }
 
   .map-offcanvas.is-visible {
     pointer-events: auto;
-    opacity: 1;
-  }
-
-  .map-offcanvas-backdrop {
-    flex: 1;
-    background: rgba(15, 23, 42, 0.45);
-    opacity: 0;
-    transition: opacity 0.2s ease;
-  }
-
-  .map-offcanvas.is-visible .map-offcanvas-backdrop {
     opacity: 1;
   }
 
@@ -1131,7 +1123,6 @@
 </section>
 
 <div class="map-offcanvas" id="detalleInventario" aria-hidden="true">
-  <div class="map-offcanvas-backdrop" data-action="close"></div>
   <aside
     class="map-offcanvas-panel"
     id="detalleInventarioPanel"

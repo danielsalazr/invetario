@@ -309,7 +309,10 @@
 
   .distribution-offcanvas {
     position: fixed;
-    inset: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(420px, 85vw);
     display: flex;
     justify-content: flex-end;
     pointer-events: none;
@@ -325,17 +328,6 @@
 
   body.offcanvas-open {
     overflow: hidden;
-  }
-
-  .offcanvas-backdrop {
-    flex: 1;
-    background: rgba(15, 23, 42, 0.45);
-    transition: opacity 0.2s ease;
-    opacity: 0;
-  }
-
-  .distribution-offcanvas.is-visible .offcanvas-backdrop {
-    opacity: 1;
   }
 
   .offcanvas-panel {
@@ -1070,7 +1062,6 @@
     </div>
 
   <div class="distribution-offcanvas" id="detalleDistribucion" aria-hidden="true">
-    <div class="offcanvas-backdrop" data-action="close"></div>
     <aside
       class="offcanvas-panel"
       id="detalleDistribucionPanel"
