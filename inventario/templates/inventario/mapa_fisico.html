@@ -25,6 +25,10 @@
     color: var(--text);
   }
 
+  body.offcanvas-open {
+    overflow: hidden;
+  }
+
   .map-layout {
     padding: 2rem 3vw 3rem;
     display: flex;
@@ -275,6 +279,27 @@
     height: 100%;
     gap: 1.2rem;
     box-shadow: 0 18px 40px -32px rgba(15, 23, 42, 0.55);
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .estante-card.is-interactive {
+    cursor: pointer;
+  }
+
+  .estante-card.is-selected {
+    border-color: rgba(37, 99, 235, 0.55);
+    box-shadow:
+      0 20px 46px -30px rgba(37, 99, 235, 0.75),
+      0 0 0 3px rgba(37, 99, 235, 0.15);
+    transform: translateY(-2px);
+  }
+
+  .estante-card.is-interactive:focus-visible {
+    outline: 3px solid rgba(37, 99, 235, 0.65);
+    outline-offset: 3px;
   }
 
   .estante-card--general {
@@ -432,6 +457,191 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--text-muted);
+  }
+
+  .map-offcanvas {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    justify-content: flex-end;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: 1400;
+  }
+
+  .map-offcanvas.is-visible {
+    pointer-events: auto;
+    opacity: 1;
+  }
+
+  .map-offcanvas-backdrop {
+    flex: 1;
+    background: rgba(15, 23, 42, 0.45);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .map-offcanvas.is-visible .map-offcanvas-backdrop {
+    opacity: 1;
+  }
+
+  .map-offcanvas-panel {
+    width: min(440px, 90vw);
+    max-width: 480px;
+    height: 100%;
+    background: #fff;
+    border-left: 1px solid rgba(148, 163, 184, 0.25);
+    box-shadow: -24px 0 60px -36px rgba(15, 23, 42, 0.65);
+    transform: translateX(100%);
+    transition: transform 0.24s ease;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .map-offcanvas.is-visible .map-offcanvas-panel {
+    transform: translateX(0);
+  }
+
+  .offcanvas-header {
+    padding: 1.5rem 1.75rem 1.25rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .offcanvas-titles h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .offcanvas-titles p {
+    margin: 0.35rem 0 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .offcanvas-close {
+    background: rgba(226, 232, 240, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    color: #1f2937;
+    border-radius: 999px;
+    width: 34px;
+    height: 34px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+
+  .offcanvas-close:hover {
+    background: rgba(148, 163, 184, 0.25);
+    transform: translateY(-1px);
+  }
+
+  .offcanvas-body {
+    padding: 1.5rem 1.75rem 2rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+  }
+
+  .offcanvas-empty {
+    font-size: 0.92rem;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 2.5rem 1rem;
+    border: 1px dashed rgba(148, 163, 184, 0.35);
+    border-radius: 14px;
+    background: rgba(241, 245, 249, 0.5);
+  }
+
+  .offcanvas-summary {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(248, 250, 252, 0.7);
+    padding: 1rem 1.1rem;
+  }
+
+  .offcanvas-summary strong {
+    color: var(--text);
+  }
+
+  .offcanvas-summary-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+  }
+
+  .offcanvas-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(226, 232, 240, 0.45);
+    font-size: 0.78rem;
+    color: var(--text);
+  }
+
+  .offcanvas-table-wrapper {
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    border-radius: 16px;
+    overflow: hidden;
+    background: #fff;
+    box-shadow: 0 16px 40px -32px rgba(15, 23, 42, 0.55);
+  }
+
+  .offcanvas-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+
+  .offcanvas-table thead {
+    background: rgba(226, 232, 240, 0.6);
+  }
+
+  .offcanvas-table th {
+    text-align: left;
+    padding: 0.75rem 1rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .offcanvas-table td {
+    padding: 0.85rem 1rem;
+    border-top: 1px solid rgba(226, 232, 240, 0.6);
+    color: var(--text);
+  }
+
+  .offcanvas-table tbody tr:hover {
+    background: rgba(226, 232, 240, 0.35);
+  }
+
+  .offcanvas-table td small {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+  }
+
+  .offcanvas-highlight {
+    font-weight: 600;
+    color: var(--accent);
   }
 
   .estante-header {
@@ -920,10 +1130,45 @@
   </div>
 </section>
 
+<div class="map-offcanvas" id="detalleInventario" aria-hidden="true">
+  <div class="map-offcanvas-backdrop" data-action="close"></div>
+  <aside
+    class="map-offcanvas-panel"
+    id="detalleInventarioPanel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="detalleInventarioTitle"
+    tabindex="-1"
+  >
+    <header class="offcanvas-header">
+      <div class="offcanvas-titles">
+        <h2 id="detalleInventarioTitle">Detalle de inventario</h2>
+        <p id="detalleInventarioSubtitle">
+          Selecciona un estante o estiba para ver los artículos registrados en sus ubicaciones.
+        </p>
+      </div>
+      <button
+        type="button"
+        class="offcanvas-close"
+        data-action="close"
+        aria-label="Cerrar detalle"
+      >
+        ×
+      </button>
+    </header>
+    <div class="offcanvas-body" id="detalleInventarioBody">
+      <div class="offcanvas-empty" id="detalleInventarioEmpty">
+        Selecciona un estante o estiba para visualizar los artículos registrados en sus ubicaciones.
+      </div>
+    </div>
+  </aside>
+</div>
+
 <script>
   window.ubicacionesConfig = {
     endpoints: {
       ubicaciones: "{% url 'ubicaciones_api' %}",
+      inventarioDetalle: "{% url 'ubicacion_inventario_detalle' 0 %}",
     },
   };
 </script>

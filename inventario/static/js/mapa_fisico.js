@@ -10,6 +10,17 @@
   const viewButtons = Array.from(
     document.querySelectorAll(".map-view-button"),
   );
+  const offcanvas = document.querySelector("#detalleInventario");
+  const offcanvasPanel = document.querySelector("#detalleInventarioPanel");
+  const offcanvasBody = document.querySelector("#detalleInventarioBody");
+  const offcanvasTitle = document.querySelector("#detalleInventarioTitle");
+  const offcanvasSubtitle = document.querySelector("#detalleInventarioSubtitle");
+  const offcanvasEmpty = document.querySelector("#detalleInventarioEmpty");
+  const offcanvasDefaultTitle =
+    offcanvasTitle?.textContent || "Detalle de inventario";
+  const offcanvasDefaultSubtitle =
+    offcanvasSubtitle?.textContent ||
+    "Selecciona un estante o estiba para ver los artículos registrados en sus ubicaciones.";
 
   if (!mapaWrapper) {
     return;
@@ -20,11 +31,19 @@
     bodegasAgrupadas: new Map(),
     seleccionada: null,
     viewMode: "detallada",
+    detalleSeleccionadoId: null,
+    detalleCache: new Map(),
+    detalleRequestToken: 0,
   };
 
   const BULLET = " \u00B7 ";
 
   const TIPOS_BASE = new Set(["ESTANTE", "ESTIBA"]);
+
+  const numberFormatter = new Intl.NumberFormat("es-CO", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  });
 
   function esTipoNivelBase(tipo) {
     return TIPOS_BASE.has(tipo);
@@ -74,6 +93,283 @@
     const nombreA = (a?.nombre || "").toLowerCase();
     const nombreB = (b?.nombre || "").toLowerCase();
     return nombreA.localeCompare(nombreB);
+  }
+
+  function resolverDetalleUrl(ubicacionId) {
+    const base = config.endpoints?.inventarioDetalle;
+    if (!base) {
+      return null;
+    }
+    const idStr = String(ubicacionId);
+    try {
+      const url = new URL(base, window.location.origin);
+      url.pathname = url.pathname.replace(
+        /\/0(?=\/inventario\/detalle\/?$)/,
+        `/${idStr}`,
+      );
+      return url.toString();
+    } catch (error) {
+      if (base.includes("/0/")) {
+        return base.replace("/0/", `/${idStr}/`);
+      }
+      if (base.endsWith("/0")) {
+        return `${base.slice(0, -2)}/${idStr}`;
+      }
+      return `${base}${idStr}/`;
+    }
+  }
+
+  function formatearCantidad(valor) {
+    const numero = Number(valor) || 0;
+    return numberFormatter.format(numero);
+  }
+
+  function marcarSeleccionCard(id) {
+    if (!mapaWrapper) return;
+    const tarjetas = mapaWrapper.querySelectorAll(".estante-card.is-interactive");
+    tarjetas.forEach((card) => {
+      const cardId = normalizarId(card.dataset.id);
+      const seleccionado = id != null && cardId === id;
+      card.classList.toggle("is-selected", seleccionado);
+      if (seleccionado) {
+        card.setAttribute("aria-pressed", "true");
+      } else {
+        card.removeAttribute("aria-pressed");
+      }
+    });
+  }
+
+  function toggleOffcanvas(mostrar) {
+    if (!offcanvas) return;
+    offcanvas.classList.toggle("is-visible", mostrar);
+    offcanvas.setAttribute("aria-hidden", mostrar ? "false" : "true");
+    if (mostrar) {
+      document.body.classList.add("offcanvas-open");
+      offcanvasPanel?.focus?.();
+    } else {
+      document.body.classList.remove("offcanvas-open");
+    }
+  }
+
+  function mostrarDetalleMensaje(texto) {
+    if (!offcanvasBody) return;
+    offcanvasBody.innerHTML = "";
+    const mensaje = document.createElement("div");
+    mensaje.className = "offcanvas-empty";
+    mensaje.textContent = texto;
+    offcanvasBody.appendChild(mensaje);
+  }
+
+  function cerrarDetalle() {
+    state.detalleSeleccionadoId = null;
+    marcarSeleccionCard(null);
+    if (offcanvasTitle) {
+      offcanvasTitle.textContent = offcanvasDefaultTitle;
+    }
+    if (offcanvasSubtitle) {
+      offcanvasSubtitle.textContent = offcanvasDefaultSubtitle;
+    }
+    if (offcanvasBody) {
+      offcanvasBody.innerHTML = "";
+      if (offcanvasEmpty) {
+        const clone = offcanvasEmpty.cloneNode(true);
+        clone.id = "";
+        offcanvasBody.appendChild(clone);
+      } else {
+        mostrarDetalleMensaje(offcanvasDefaultSubtitle);
+      }
+    }
+    toggleOffcanvas(false);
+  }
+
+  function crearPill(contenido) {
+    const pill = document.createElement("span");
+    pill.className = "offcanvas-pill";
+    pill.textContent = contenido;
+    return pill;
+  }
+
+  function renderDetalleInventario(data) {
+    if (!offcanvasBody) return;
+    if (!data || typeof data !== "object") {
+      mostrarDetalleMensaje("No hay información disponible para esta ubicación.");
+      return;
+    }
+
+    const { ubicacion, totales, alcance, items } = data;
+    const nombre = ubicacion?.nombre || "Ubicación";
+    const ruta = ubicacion?.ruta || "";
+    const bodegaNombre = ubicacion?.bodega?.nombre || "";
+
+    if (offcanvasTitle) {
+      offcanvasTitle.textContent = nombre;
+    }
+
+    if (offcanvasSubtitle) {
+      const partes = [];
+      if (bodegaNombre) {
+        partes.push(`Bodega ${bodegaNombre}`);
+      }
+      if (ruta && ruta !== nombre) {
+        partes.push(ruta);
+      }
+      offcanvasSubtitle.textContent = partes.length
+        ? partes.join(BULLET)
+        : offcanvasDefaultSubtitle;
+    }
+
+    offcanvasBody.innerHTML = "";
+
+    const resumen = document.createElement("div");
+    resumen.className = "offcanvas-summary";
+    const lista = document.createElement("div");
+    lista.className = "offcanvas-summary-list";
+    lista.appendChild(
+      crearPill(
+        `${alcance?.ubicaciones ?? 1} ${Number(alcance?.ubicaciones ?? 1) === 1 ? "ubicación" : "ubicaciones"}`,
+      ),
+    );
+    lista.appendChild(
+      crearPill(
+        `${totales?.registros ?? 0} ${Number(totales?.registros ?? 0) === 1 ? "registro" : "registros"}`,
+      ),
+    );
+
+    const totalesUnidad = Array.isArray(totales?.por_unidad)
+      ? totales.por_unidad
+      : [];
+    totalesUnidad.forEach((detalle) => {
+      const cantidad = formatearCantidad(detalle?.cantidad ?? 0);
+      const unidad = detalle?.unidad || "Sin unidad";
+      lista.appendChild(crearPill(`${cantidad} ${unidad}`));
+    });
+
+    resumen.appendChild(lista);
+    offcanvasBody.appendChild(resumen);
+
+    if (!items || !items.length) {
+      const mensaje = document.createElement("div");
+      mensaje.className = "offcanvas-empty";
+      mensaje.textContent =
+        "No hay inventario registrado en esta ubicación ni en sus descendientes.";
+      offcanvasBody.appendChild(mensaje);
+      return;
+    }
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "offcanvas-table-wrapper";
+    const tabla = document.createElement("table");
+    tabla.className = "offcanvas-table";
+    tabla.innerHTML = `
+      <thead>
+        <tr>
+          <th>Ubicación</th>
+          <th>Nomenclatura</th>
+          <th>Artículo</th>
+          <th>Cantidad</th>
+          <th>Unidad</th>
+        </tr>
+      </thead>
+    `;
+    const tbody = document.createElement("tbody");
+
+    items.forEach((item) => {
+      const fila = document.createElement("tr");
+      const ubicacionItem = item?.ubicacion || {};
+      const articulo = item?.articulo || {};
+      const nombreUbicacion = escaparHtml(ubicacionItem.nombre || "Ubicación");
+      const tipoUbicacion =
+        ubicacionItem.tipo_display || ubicacionItem.tipo || "";
+      const detalleUbicacion = escaparHtml(tipoUbicacion);
+      const nomenclatura = escaparHtml(ubicacionItem.nomenclatura || "-");
+      const articuloNombre = escaparHtml(
+        articulo.descripcion || "Artículo sin descripción",
+      );
+      const articuloMarca = escaparHtml(articulo.marca || "");
+      const cantidad = formatearCantidad(item?.cantidad ?? 0);
+      const unidad = escaparHtml(item?.unidad || "Sin unidad");
+
+      fila.innerHTML = `
+        <td>
+          ${nombreUbicacion}
+          ${
+            detalleUbicacion
+              ? `<small>${detalleUbicacion}</small>`
+              : ""
+          }
+        </td>
+        <td>${nomenclatura}</td>
+        <td>
+          ${articuloNombre}
+          ${
+            articuloMarca
+              ? `<small>${articuloMarca}</small>`
+              : ""
+          }
+        </td>
+        <td class="offcanvas-highlight">${cantidad}</td>
+        <td>${unidad}</td>
+      `;
+      tbody.appendChild(fila);
+    });
+
+    tabla.appendChild(tbody);
+    wrapper.appendChild(tabla);
+    offcanvasBody.appendChild(wrapper);
+  }
+
+  async function mostrarDetalleUbicacion(nodo) {
+    if (!nodo) return;
+    const ubicacionId = normalizarId(nodo.id);
+    if (ubicacionId == null) {
+      return;
+    }
+    state.detalleSeleccionadoId = ubicacionId;
+    marcarSeleccionCard(ubicacionId);
+    toggleOffcanvas(true);
+    mostrarDetalleMensaje("Cargando inventario de la ubicación seleccionada...");
+
+    const cache = state.detalleCache.get(ubicacionId);
+    if (cache) {
+      renderDetalleInventario(cache);
+      return;
+    }
+
+    const url = resolverDetalleUrl(ubicacionId);
+    if (!url) {
+      mostrarDetalleMensaje(
+        "No se encontró la ruta para consultar el inventario de esta ubicación.",
+      );
+      return;
+    }
+
+    state.detalleRequestToken += 1;
+    const requestToken = state.detalleRequestToken;
+
+    try {
+      const respuesta = await fetch(url, {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+      });
+      if (!respuesta.ok) {
+        throw new Error("No fue posible obtener la información de inventario.");
+      }
+      const data = await respuesta.json();
+      if (state.detalleRequestToken !== requestToken) {
+        return;
+      }
+      state.detalleCache.set(ubicacionId, data);
+      renderDetalleInventario(data);
+    } catch (error) {
+      console.error(error);
+      if (state.detalleRequestToken !== requestToken) {
+        return;
+      }
+      mostrarDetalleMensaje(
+        error.message ||
+          "No fue posible cargar la información de inventario de la ubicación seleccionada.",
+      );
+    }
   }
 
   function transformarNodo(nodo, padreId = null) {
@@ -338,6 +634,45 @@ function construirNivelBase(estante, contenedores) {
   });
 }
 
+  function prepararCardInteraccion(card, nodo) {
+    if (!card || !nodo) {
+      return card;
+    }
+    const id = normalizarId(nodo.id);
+    if (id == null) {
+      return card;
+    }
+    card.dataset.id = String(id);
+    card.dataset.tipo = nodo.tipo || "";
+    card.classList.add("is-interactive");
+    if (!card.hasAttribute("role")) {
+      card.setAttribute("role", "button");
+    }
+    card.tabIndex = 0;
+    if (state.detalleSeleccionadoId === id) {
+      card.classList.add("is-selected");
+      card.setAttribute("aria-pressed", "true");
+    }
+
+    const activar = (event) => {
+      if (event.type === "keydown" && event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      event.preventDefault();
+      mostrarDetalleUbicacion(nodo);
+    };
+
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input, select, textarea")) {
+        return;
+      }
+      activar(event);
+    });
+
+    card.addEventListener("keydown", activar);
+    return card;
+  }
+
   function construirEstibaDetalle(estiba) {
     const card = document.createElement("div");
     card.className = "estante-card estante-card--estiba";
@@ -393,7 +728,7 @@ function construirNivelBase(estante, contenedores) {
     }
 
     card.appendChild(carga);
-    return card;
+    return prepararCardInteraccion(card, estiba);
   }
 
   function calcularResumenEstante(estante) {
@@ -516,7 +851,7 @@ function construirNivelBase(estante, contenedores) {
     body.appendChild(statsWrap);
 
     card.appendChild(body);
-    return card;
+    return prepararCardInteraccion(card, estiba);
   }
 
   function construirEstante(estante) {
@@ -587,7 +922,7 @@ function construirNivelBase(estante, contenedores) {
     }
 
     card.appendChild(frame);
-    return card;
+    return prepararCardInteraccion(card, estante);
   }
 
   function construirEstanteGeneral(estante) {
@@ -637,7 +972,7 @@ function construirNivelBase(estante, contenedores) {
     body.appendChild(statsWrap);
     card.appendChild(body);
 
-    return card;
+    return prepararCardInteraccion(card, estante);
   }
 
   function dividirEnFilas(lista, tamano = 10) {
@@ -750,6 +1085,9 @@ function construirNivelBase(estante, contenedores) {
   function renderSeleccion() {
     if (!state.seleccionada || !state.bodegasAgrupadas.has(state.seleccionada)) {
       mostrarEmptyState("Selecciona una bodega para visualizar sus ubicaciones de nivel 1.");
+      if (state.detalleSeleccionadoId != null) {
+        cerrarDetalle();
+      }
       return;
     }
 
@@ -761,6 +1099,20 @@ function construirNivelBase(estante, contenedores) {
     mapaWrapper.dataset.view = state.viewMode;
     mapaWrapper.appendChild(construirBodegaVista(bodega, state.viewMode));
     actualizarResumen(bodega);
+
+    if (state.detalleSeleccionadoId != null) {
+      const selector = `.estante-card.is-interactive[data-id="${String(
+        state.detalleSeleccionadoId,
+      )}"]`;
+      const cardSeleccionada = mapaWrapper.querySelector(selector);
+      if (cardSeleccionada) {
+        marcarSeleccionCard(state.detalleSeleccionadoId);
+      } else {
+        cerrarDetalle();
+      }
+    } else {
+      marcarSeleccionCard(null);
+    }
   }
 
   function poblarSelector(bodegasLista) {
@@ -779,6 +1131,10 @@ function construirNivelBase(estante, contenedores) {
     selectorBodega.addEventListener("change", (event) => {
       const valor = event.target.value;
       state.seleccionada = valor ? normalizarId(valor) : null;
+      state.detalleCache.clear();
+      if (state.detalleSeleccionadoId != null) {
+        cerrarDetalle();
+      }
       renderSeleccion();
     });
   }
@@ -799,6 +1155,10 @@ function construirNivelBase(estante, contenedores) {
 
   async function cargarMapa() {
     mostrarEmptyState("Cargando mapa de ubicaciones fisicas...");
+    state.detalleCache.clear();
+    if (state.detalleSeleccionadoId != null) {
+      cerrarDetalle();
+    }
     try {
       const respuesta = await fetch(ubicacionesEndpoint, {
         headers: { Accept: "application/json" },
@@ -841,6 +1201,22 @@ function construirNivelBase(estante, contenedores) {
       );
     }
   }
+
+  if (offcanvas) {
+    offcanvas.addEventListener("click", (event) => {
+      const accionCerrar = event.target.closest("[data-action='close']");
+      if (accionCerrar) {
+        event.preventDefault();
+        cerrarDetalle();
+      }
+    });
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && offcanvas?.classList.contains("is-visible")) {
+      cerrarDetalle();
+    }
+  });
 
   actualizarViewButtons();
   cargarMapa();

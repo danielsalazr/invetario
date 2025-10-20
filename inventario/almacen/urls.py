@@ -39,4 +39,9 @@ urlpatterns = [
         views.PlanoDistribucionView.as_view(),
         name="ubicaciones_distribucion_api",
     ),
+    path(
+        "ubicaciones/<int:ubicacion_id>/inventario/detalle/",
+        views.UbicacionInventarioDetalleView.as_view(),
+        name="ubicacion_inventario_detalle",
+    ),
 ]

@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Sum
@@ -674,3 +676,164 @@ class PlanoDistribucionView(APIView):
             {"detail": "Distribucion guardada correctamente."},
             status=status.HTTP_200_OK,
         )
+
+
+class UbicacionInventarioDetalleView(APIView):
+    def get(self, request, ubicacion_id):
+        ubicacion = get_object_or_404(
+            Ubicacion.objects.select_related("bodega"),
+            pk=ubicacion_id,
+        )
+
+        ubicaciones_data = list(
+            Ubicacion.objects.filter(bodega=ubicacion.bodega).values(
+                "id",
+                "padre_id",
+                "nombre",
+                "nomenclatura",
+                "tipo",
+            )
+        )
+        info_map = {row["id"]: row for row in ubicaciones_data}
+        if ubicacion.id not in info_map:
+            info_map[ubicacion.id] = {
+                "id": ubicacion.id,
+                "padre_id": ubicacion.padre_id,
+                "nombre": ubicacion.nombre,
+                "nomenclatura": ubicacion.nomenclatura,
+                "tipo": ubicacion.tipo,
+            }
+
+        children_map = defaultdict(list)
+        for row in ubicaciones_data:
+            children_map[row["padre_id"]].append(row["id"])
+
+        def construir_ruta_local(ubicacion_obj):
+            if not ubicacion_obj:
+                return ""
+            actual_id = ubicacion_obj.id
+            partes = []
+            while actual_id is not None:
+                data = info_map.get(actual_id)
+                if not data:
+                    break
+                nombre = data.get("nombre") or ""
+                if nombre:
+                    partes.append(nombre)
+                actual_id = data.get("padre_id")
+            return " / ".join(reversed(partes))
+
+        ids = []
+        stack = [ubicacion.id]
+        vistos = set()
+        while stack:
+            current = stack.pop()
+            if current in vistos:
+                continue
+            vistos.add(current)
+            ids.append(current)
+            for child_id in children_map.get(current, []):
+                if child_id not in vistos:
+                    stack.append(child_id)
+
+        inventario_qs = (
+            Inventario.objects.filter(Ubicacion_id__in=ids)
+            .select_related(
+                "Ubicacion",
+                "articulos__unidad_de_medida",
+                "articulos__marca",
+            )
+            .order_by(
+                "Ubicacion__nomenclatura",
+                "Ubicacion__nombre",
+                "articulos__descripcion",
+            )
+        )
+
+        items = []
+        totales_unidades = defaultdict(int)
+        total_cantidad = 0
+
+        for registro in inventario_qs:
+            articulo = registro.articulos
+            ubicacion_item = registro.Ubicacion
+            unidad_nombre = (
+                articulo.unidad_de_medida.nombre
+                if articulo and articulo.unidad_de_medida
+                else "Sin unidad"
+            )
+            cantidad = registro.cantidad or 0
+            totales_unidades[unidad_nombre] += cantidad
+            total_cantidad += cantidad
+            items.append(
+                {
+                    "inventario_id": registro.id,
+                    "cantidad": cantidad,
+                    "unidad": unidad_nombre,
+                    "articulo": {
+                        "id": articulo.code if articulo else None,
+                        "descripcion": articulo.descripcion if articulo else "",
+                        "marca": (
+                            articulo.marca.nombre if articulo and articulo.marca else ""
+                        ),
+                    },
+                    "ubicacion": {
+                        "id": ubicacion_item.id if ubicacion_item else None,
+                        "nombre": ubicacion_item.nombre if ubicacion_item else "",
+                    "nomenclatura": (
+                        ubicacion_item.nomenclatura if ubicacion_item else ""
+                    ),
+                    "tipo": ubicacion_item.tipo if ubicacion_item else "",
+                    "tipo_display": (
+                        ubicacion_item.get_tipo_display() if ubicacion_item else ""
+                    ),
+                    "ruta": construir_ruta_local(ubicacion_item),
+                },
+            }
+        )
+
+        totales_por_unidad = [
+            {"unidad": unidad, "cantidad": cantidad}
+            for unidad, cantidad in totales_unidades.items()
+        ]
+        totales_por_unidad.sort(key=lambda item: item["unidad"])
+
+        ubicaciones_incluidas = []
+        for ubicacion_in_id in ids:
+            data = info_map.get(ubicacion_in_id)
+            if data:
+                ubicaciones_incluidas.append(
+                    {
+                        "id": ubicacion_in_id,
+                        "nombre": data.get("nombre") or "",
+                        "nomenclatura": data.get("nomenclatura") or "",
+                        "tipo": data.get("tipo") or "",
+                    }
+                )
+
+        respuesta = {
+            "ubicacion": {
+                "id": ubicacion.id,
+                "nombre": ubicacion.nombre,
+                "nomenclatura": ubicacion.nomenclatura,
+                "tipo": ubicacion.tipo,
+                "ruta": construir_ruta_local(ubicacion),
+                "bodega": {
+                    "id": ubicacion.bodega_id,
+                    "nombre": ubicacion.bodega.nombre if ubicacion.bodega else "",
+                },
+            },
+            "alcance": {
+                "ubicaciones": len(ids),
+                "descendientes": max(len(ids) - 1, 0),
+            },
+            "totales": {
+                "registros": len(items),
+                "cantidad_total": total_cantidad,
+                "por_unidad": totales_por_unidad,
+            },
+            "items": items,
+            "ubicaciones_incluidas": ubicaciones_incluidas,
+        }
+
+        return Response(respuesta, status=status.HTTP_200_OK)
