@@ -3,6 +3,21 @@
 {% block container %}
 
 <style>
+  :root {
+    --accent: #1d4ed8;
+    --accent-soft: #dbeafe;
+    --surface: #f8fafc;
+    --border: #e2e8f0;
+    --text: #0f172a;
+    --text-muted: #64748b;
+    --panel: #22d3ee;
+    --panel-soft: rgba(34, 211, 238, 0.18);
+    --division: #a855f7;
+    --division-soft: rgba(168, 85, 247, 0.18);
+    --contenedor: #f97316;
+    --contenedor-soft: rgba(249, 115, 22, 0.18);
+  }
+
   .layout-editor {
     display: flex;
     flex-direction: column;
@@ -183,6 +198,15 @@
     background: linear-gradient(145deg, #475569 0%, #1f2937 100%);
   }
 
+  .grid-item--pasillo {
+    z-index: 3;
+  }
+
+  .grid-item--span {
+    right: auto;
+    bottom: auto;
+  }
+
   .grid-item-remove {
     position: absolute;
     top: 6px;
@@ -279,6 +303,687 @@
     color: #1f2937;
   }
 
+  .grid-item.is-selected {
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.3), 0 14px 32px -18px rgba(37, 99, 235, 0.75);
+  }
+
+  .distribution-offcanvas {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    justify-content: flex-end;
+    pointer-events: none;
+    z-index: 1200;
+    transition: opacity 0.2s ease;
+    opacity: 0;
+  }
+
+  .distribution-offcanvas.is-visible {
+    pointer-events: auto;
+    opacity: 1;
+  }
+
+  body.offcanvas-open {
+    overflow: hidden;
+  }
+
+  .offcanvas-backdrop {
+    flex: 1;
+    background: rgba(15, 23, 42, 0.45);
+    transition: opacity 0.2s ease;
+    opacity: 0;
+  }
+
+  .distribution-offcanvas.is-visible .offcanvas-backdrop {
+    opacity: 1;
+  }
+
+  .offcanvas-panel {
+    width: min(420px, 85vw);
+    max-width: 480px;
+    height: 100%;
+    background: #fff;
+    border-left: 1px solid rgba(148, 163, 184, 0.25);
+    box-shadow: -24px 0 60px -36px rgba(15, 23, 42, 0.65);
+    transform: translateX(100%);
+    transition: transform 0.24s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .distribution-offcanvas.is-visible .offcanvas-panel {
+    transform: translateX(0);
+  }
+
+  .offcanvas-header {
+    padding: 1.5rem 1.75rem 1.25rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .offcanvas-titles h2 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--accent);
+  }
+
+  .offcanvas-titles p {
+    margin: 0.35rem 0 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+
+  .offcanvas-close {
+    background: rgba(226, 232, 240, 0.6);
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    color: #1f2937;
+    border-radius: 999px;
+    width: 34px;
+    height: 34px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+
+  .offcanvas-close:hover {
+    background: rgba(148, 163, 184, 0.25);
+    transform: translateY(-1px);
+  }
+
+  .offcanvas-body {
+    padding: 1.5rem 1.75rem 2rem;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+  }
+
+  .offcanvas-empty {
+    font-size: 0.92rem;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 2.5rem 1rem;
+    border: 1px dashed rgba(148, 163, 184, 0.35);
+    border-radius: 14px;
+    background: rgba(241, 245, 249, 0.5);
+  }
+
+  .estante-card {
+    background: #fff;
+    border-radius: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    padding: 1.35rem 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+    box-shadow: 0 16px 40px -32px rgba(15, 23, 42, 0.55);
+  }
+
+  .estante-card--general {
+    gap: 1rem;
+  }
+
+  .estante-card--estiba {
+    gap: 1.1rem;
+  }
+
+  .estante-card--estiba-general {
+    gap: 1rem;
+  }
+
+  .estante-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .estante-title {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .estante-title small {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .estante-summary {
+    font-size: 0.84rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .shelf-frame {
+    position: relative;
+    padding: 1.6rem 3.8rem 2.6rem;
+    background: linear-gradient(
+      180deg,
+      rgba(248, 250, 252, 0.95) 0%,
+      rgba(241, 245, 249, 0.88) 100%
+    );
+    border-radius: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    min-height: 180px;
+  }
+
+  .shelf-rail {
+    position: absolute;
+    top: 1rem;
+    bottom: 1.4rem;
+    width: 18px;
+    border-radius: 6px;
+    background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.25);
+    opacity: 0.96;
+    z-index: 0;
+  }
+
+  .shelf-rail::after {
+    content: "";
+    position: absolute;
+    top: 0.6rem;
+    bottom: 0.6rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    background: repeating-linear-gradient(
+      180deg,
+      rgba(148, 163, 184, 0.45) 0px,
+      rgba(148, 163, 184, 0.45) 6px,
+      transparent 6px,
+      transparent 18px
+    );
+  }
+
+  .shelf-rail-left {
+    left: 1.6rem;
+  }
+
+  .shelf-rail-right {
+    right: 1.6rem;
+  }
+
+  .shelf-cross {
+    position: absolute;
+    left: 1.6rem;
+    right: 1.6rem;
+    height: 12px;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #111827 0%, #1f2937 100%);
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.18);
+    opacity: 0.95;
+    z-index: 0;
+  }
+
+  .shelf-cross-top {
+    top: 0.7rem;
+  }
+
+  .shelf-cross-bottom {
+    bottom: 1.2rem;
+  }
+
+  .shelf-cross-middle {
+    position: relative;
+    top: 0;
+    left: auto;
+    height: 10px;
+    margin: -1rem 0 -0.6rem;
+    opacity: 0.6;
+    width: 110%;
+    background: #27303e;
+  }
+
+  .shelf-foot {
+    position: absolute;
+    bottom: -1.25rem;
+    width: 34px;
+    height: 20px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
+    box-shadow:
+      0 14px 24px -18px rgba(15, 23, 42, 0.8),
+      inset 0 0 0 1px rgba(148, 163, 184, 0.35);
+  }
+
+  .shelf-foot-left {
+    left: 1.3rem;
+  }
+
+  .shelf-foot-right {
+    right: 1.3rem;
+  }
+
+  .shelf-level-stack {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+    z-index: 1;
+  }
+
+  .shelf-level {
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    box-shadow: 0 12px 32px -28px rgba(15, 23, 42, 0.55);
+    padding: 1rem 1.1rem 1.2rem;
+  }
+
+  .shelf-level[data-tipo="panel"] {
+    background: linear-gradient(
+      180deg,
+      rgba(34, 211, 238, 0.16) 0%,
+      rgba(34, 211, 238, 0.08) 100%
+    );
+    border-color: rgba(34, 211, 238, 0.35);
+  }
+
+  .shelf-level[data-tipo="base"] {
+    background: linear-gradient(
+      180deg,
+      rgba(249, 115, 22, 0.16) 0%,
+      rgba(249, 115, 22, 0.08) 100%
+    );
+    border-color: rgba(249, 115, 22, 0.35);
+  }
+
+  .shelf-board {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .shelf-board--panel,
+  .shelf-board--base {
+    border-radius: 14px;
+    padding: 1rem 1.05rem;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: rgba(248, 250, 252, 0.85);
+  }
+
+  .shelf-board--panel {
+    border-color: rgba(34, 211, 238, 0.35);
+    background: rgba(34, 211, 238, 0.14);
+  }
+
+  .shelf-board--base {
+    border-color: rgba(249, 115, 22, 0.35);
+    background: rgba(249, 115, 22, 0.14);
+  }
+
+  .shelf-level-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .shelf-level-name {
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .shelf-level-code {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .shelf-level-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+  }
+
+  .shelf-panel-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.6rem;
+  }
+
+  .shelf-level-body--empty {
+    text-align: center;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    border: 1px dashed rgba(148, 163, 184, 0.35);
+    border-radius: 12px;
+    padding: 0.85rem 1rem;
+    background: rgba(241, 245, 249, 0.45);
+  }
+
+  .shelf-level-index {
+    align-self: flex-start;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.4);
+    color: var(--text-muted);
+    background: rgba(248, 250, 252, 0.85);
+  }
+
+  .shelf-level-index--base {
+    border-color: rgba(249, 115, 22, 0.45);
+    color: #b45309;
+    background: rgba(249, 115, 22, 0.16);
+  }
+
+  .divisiones-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+  }
+
+  .division-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(255, 255, 255, 0.95);
+    padding: 0.75rem 0.9rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  }
+
+  .division-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .contenedores-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .contenedor-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    padding: 0.4rem 0.75rem;
+    background: linear-gradient(
+      135deg,
+      rgba(226, 232, 240, 0.9) 0%,
+      rgba(248, 250, 252, 0.8) 100%
+    );
+    font-size: 0.76rem;
+    color: var(--text);
+  }
+
+  .contenedor-chip span:last-child {
+    font-size: 0.74rem;
+    color: var(--text-muted);
+  }
+
+  .shelf-empty {
+    border-radius: 14px;
+    border: 1px dashed rgba(148, 163, 184, 0.35);
+    padding: 1rem 1.2rem;
+    font-size: 0.86rem;
+    color: var(--text-muted);
+    text-align: center;
+    background: rgba(241, 245, 249, 0.4);
+  }
+
+  .estiba-frame {
+    position: relative;
+    padding: 1.55rem 1.4rem 1.2rem;
+    background: linear-gradient(
+      180deg,
+      rgba(252, 244, 238, 0.95) 0%,
+      rgba(250, 238, 221, 0.88) 100%
+    );
+    border-radius: 18px;
+    border: 1px solid rgba(194, 134, 52, 0.35);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .estiba-top {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.45rem;
+  }
+
+  .estiba-plank {
+    height: 12px;
+    border-radius: 10px;
+    background: linear-gradient(90deg, #f7cd95 0%, #c57b2c 100%);
+    box-shadow:
+      0 3px 6px rgba(78, 38, 6, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  }
+
+  .estiba-center {
+    flex: 1;
+    min-height: 96px;
+    border-radius: 14px;
+    background: linear-gradient(
+      180deg,
+      rgba(226, 180, 115, 0.42) 0%,
+      rgba(226, 180, 115, 0) 100%
+    );
+  }
+
+  .estiba-base {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+  }
+
+  .estiba-block {
+    flex: 1;
+    height: 26px;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #b1732a 0%, #7a4915 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.25),
+      0 8px 16px -10px rgba(74, 42, 10, 0.65);
+  }
+
+  .estiba-load {
+    border-radius: 16px;
+    border: 1px dashed rgba(148, 163, 184, 0.45);
+    background: rgba(226, 232, 240, 0.4);
+    padding: 1rem 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .estiba-load-title {
+    font-weight: 600;
+    font-size: 0.86rem;
+    color: var(--text);
+  }
+
+  .estiba-load-grid {
+    justify-content: flex-start;
+  }
+
+  .estiba-general-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.4rem;
+    padding: 1.1rem 1.2rem;
+    border-radius: 14px;
+    border: 1px dashed rgba(148, 163, 184, 0.45);
+    background: linear-gradient(
+      180deg,
+      rgba(248, 249, 252, 0.92) 0%,
+      rgba(236, 238, 244, 0.85) 100%
+    );
+  }
+
+  .estiba-icon {
+    position: relative;
+    width: 72px;
+    height: 54px;
+    border-radius: 18px;
+    padding: 8px 6px;
+    background: linear-gradient(
+      180deg,
+      rgba(226, 180, 115, 0.7) 0%,
+      rgba(194, 134, 52, 0.85) 100%
+    );
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.55),
+      0 12px 24px -18px rgba(107, 63, 15, 0.75);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: stretch;
+  }
+
+  .estiba-icon::after {
+    content: "";
+    position: absolute;
+    left: 14%;
+    right: 14%;
+    bottom: 6px;
+    height: 12px;
+    border-radius: 10px;
+    background: linear-gradient(180deg, #a3641f 0%, #6b3a0d 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.3),
+      0 6px 14px -10px rgba(65, 35, 6, 0.65);
+  }
+
+  .estiba-icon-plank {
+    display: block;
+    height: 7px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #f7cd95 0%, #c57b2c 100%);
+    box-shadow:
+      0 3px 6px rgba(78, 38, 6, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  }
+
+  .estiba-general-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.2rem;
+  }
+
+  .estante-general-body {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.2rem;
+    padding: 1rem 1.1rem;
+    border-radius: 14px;
+    border: 1px dashed rgba(148, 163, 184, 0.45);
+    background: rgba(226, 232, 240, 0.45);
+  }
+
+  .estante-general-icon {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    border-radius: 18px;
+    background: linear-gradient(
+      180deg,
+      rgba(59, 130, 246, 0.18) 0%,
+      rgba(37, 99, 235, 0.28) 100%
+    );
+    border: 1px solid rgba(37, 99, 235, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .estante-general-icon::before,
+  .estante-general-icon::after {
+    content: "";
+    position: absolute;
+    width: 68%;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.65);
+  }
+
+  .estante-general-icon::before {
+    top: 18px;
+  }
+
+  .estante-general-icon::after {
+    bottom: 18px;
+  }
+
+  .estante-general-icon span {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 6px;
+    height: 70%;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.6);
+  }
+
+  .estante-general-stats {
+    display: flex;
+    gap: 1.4rem;
+    flex-wrap: wrap;
+  }
+
+  .estante-general-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    min-width: 72px;
+  }
+
+  .estante-general-stat-value {
+    font-weight: 700;
+    font-size: 1.06rem;
+    color: var(--accent);
+  }
+
+  .estante-general-stat-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+
   @media (max-width: 1024px) {
     .canvas-panel {
       flex-basis: 100%;
@@ -358,11 +1063,44 @@
           <div class="summary-list" id="resumenDistribucion">
             <div><strong>Bodega:</strong> —</div>
             <div><strong>Total ubicaciones:</strong> 0</div>
-            <div><strong>Filas x columnas:</strong> 0 × 0</div>
-          </div>
-        </section>
+      <div><strong>Filas x columnas:</strong> 0 × 0</div>
+      </div>
+    </section>
       </aside>
     </div>
+
+  <div class="distribution-offcanvas" id="detalleDistribucion" aria-hidden="true">
+    <div class="offcanvas-backdrop" data-action="close"></div>
+    <aside
+      class="offcanvas-panel"
+      id="detalleDistribucionPanel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="detalleDistribucionTitle"
+    >
+      <header class="offcanvas-header">
+        <div class="offcanvas-titles">
+          <h2 id="detalleDistribucionTitle">Detalle de ubicación</h2>
+          <p id="detalleDistribucionSubtitle">
+            Selecciona un estante o estiba para ver su estructura.
+          </p>
+        </div>
+        <button
+          type="button"
+          class="offcanvas-close"
+          data-action="close"
+          aria-label="Cerrar detalle"
+        >
+          ×
+        </button>
+      </header>
+      <div class="offcanvas-body" id="detalleDistribucionBody">
+        <div class="offcanvas-empty" id="detalleDistribucionEmpty">
+          Selecciona un estante o estiba en el plano para visualizar sus paneles, divisiones y contenedores.
+        </div>
+      </div>
+    </aside>
+  </div>
 </section>
 
 <script>
@@ -370,6 +1108,7 @@
     endpoints: {
       bodegas: "{% url 'bodegas_api' %}",
       distribucion: "{% url 'ubicaciones_distribucion_api' %}",
+      ubicaciones: "{% url 'ubicaciones_api' %}",
     },
   };
 </script>
