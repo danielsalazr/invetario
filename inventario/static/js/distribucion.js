@@ -122,6 +122,13 @@
     const gapRow = gaps?.row ?? 0;
     nodo.dataset.spanCols = String(spanCols);
     nodo.dataset.spanRows = String(spanRows);
+    let orientation = "square";
+    if (spanCols > spanRows) {
+      orientation = "horizontal";
+    } else if (spanRows > spanCols) {
+      orientation = "vertical";
+    }
+    nodo.dataset.orientation = orientation;
 
     if (spanCols === 1 && spanRows === 1) {
       nodo.classList.remove("grid-item--span");
@@ -145,6 +152,58 @@
     nodo.style.right = "auto";
     nodo.style.bottom = "auto";
     nodo.style.zIndex = "5";
+  }
+
+  function obtenerRectanguloPasillo(item) {
+    const ancho = Math.max(
+      1,
+      Number.parseInt(item.ancho, 10) || Number(item.ancho) || 1,
+    );
+    const alto = Math.max(
+      1,
+      Number.parseInt(item.alto, 10) || Number(item.alto) || 1,
+    );
+    const columnaBase = Number.parseInt(item.columna, 10);
+    const filaBase = Number.parseInt(item.fila, 10);
+    const columna = Number.isNaN(columnaBase)
+      ? Number(item.columna) || 1
+      : columnaBase || 1;
+    const fila = Number.isNaN(filaBase) ? Number(item.fila) || 1 : filaBase || 1;
+    return {
+      izquierda: columna,
+      derecha: columna + ancho - 1,
+      arriba: fila,
+      abajo: fila + alto - 1,
+      id: item.id,
+    };
+  }
+
+  function calcularCoberturaPasillos(lista) {
+    const cobertura = new Map();
+    if (!Array.isArray(lista)) {
+      return cobertura;
+    }
+    lista.forEach((item) => {
+      if (!item || !item.es_pasillo) return;
+      const rect = obtenerRectanguloPasillo(item);
+      for (let fila = rect.arriba; fila <= rect.abajo; fila += 1) {
+        for (let columna = rect.izquierda; columna <= rect.derecha; columna += 1) {
+          const key = `${fila}-${columna}`;
+          if (!cobertura.has(key)) {
+            cobertura.set(key, {
+              fila,
+              columna,
+              pasillos: [],
+            });
+          }
+          cobertura.get(key).pasillos.push({
+            id: item.id,
+            rect,
+          });
+        }
+      }
+    });
+    return cobertura;
   }
 
   function normalizarId(valor) {
@@ -870,12 +929,24 @@
     }
   }
 
-  function rowColToIndexWithCols(row, col, cols) {
-    return (row - 1) * cols + (col - 1);
+  function obtenerMaxFila() {
+    return state.items.reduce((max, item) => {
+      const alto = Math.max(
+        1,
+        Number.parseInt(item.alto, 10) || Number(item.alto) || 1,
+      );
+      return Math.max(max, item.fila + alto - 1);
+    }, 1);
   }
 
-  function obtenerMaxFila() {
-    return state.items.reduce((max, item) => Math.max(max, item.fila), 1);
+  function obtenerMaxColumna() {
+    return state.items.reduce((max, item) => {
+      const ancho = Math.max(
+        1,
+        Number.parseInt(item.ancho, 10) || Number(item.ancho) || 1,
+      );
+      return Math.max(max, item.columna + ancho - 1);
+    }, 1);
   }
 
   function findNextAvailableIndex(startIndex = 0, excludedId = null) {
@@ -919,20 +990,6 @@
         const { fila, columna } = indexToRowCol(index);
         return { ...item, fila, columna };
       });
-  }
-
-  function reacomodarPorColumnas(prevCols) {
-    const copia = state.items
-      .slice()
-      .sort(
-        (a, b) =>
-          rowColToIndexWithCols(a.fila, a.columna, prevCols) -
-          rowColToIndexWithCols(b.fila, b.columna, prevCols),
-      );
-    state.items = copia.map((item, index) => {
-      const { fila, columna } = indexToRowCol(index);
-      return { ...item, fila, columna };
-    });
   }
 
   function limpiarLienzo() {
@@ -1045,6 +1102,7 @@
       mapa.set(`${item.fila}-${item.columna}`, item);
     });
     const gaps = obtenerSeparacionCeldas();
+    const coberturaPasillos = calcularCoberturaPasillos(state.items);
 
     for (let fila = 1; fila <= state.canvas.rows; fila += 1) {
       for (let columna = 1; columna <= state.canvas.cols; columna += 1) {
@@ -1077,6 +1135,13 @@
           if (item.es_pasillo) {
             aplicarDimensionesPasillo(elemento, item, gaps);
           }
+        }
+
+        const cobertura = coberturaPasillos.get(`${fila}-${columna}`);
+        if (cobertura && cobertura.pasillos.length > 1) {
+          const overlay = document.createElement("div");
+          overlay.className = "pasillo-cross-overlay";
+          celda.appendChild(overlay);
         }
         gridInner.appendChild(celda);
       }
@@ -1231,17 +1296,24 @@
   }
 
   function manejarCambioColumnas() {
-    const valor = Number.parseInt(columnasInput.value || "1", 10);
-    const previo = state.canvas.cols;
-    state.canvas.cols = Math.max(1, valor);
-    reacomodarPorColumnas(previo);
+    const parsed = Number.parseInt(columnasInput.value || "1", 10);
+    const valor = Number.isNaN(parsed) ? 1 : parsed;
+    const minimo = Math.max(1, obtenerMaxColumna());
+    state.canvas.cols = Math.max(minimo, valor);
+    if (columnasInput) {
+      columnasInput.value = String(state.canvas.cols);
+    }
     renderGrid();
   }
 
   function manejarCambioFilas() {
-    const valor = Number.parseInt(filasInput.value || "1", 10);
+    const parsed = Number.parseInt(filasInput.value || "1", 10);
+    const valor = Number.isNaN(parsed) ? 1 : parsed;
     const minimo = Math.max(obtenerMaxFila(), Math.ceil(state.items.length / state.canvas.cols) || 1);
     state.canvas.rows = Math.max(minimo, valor);
+    if (filasInput) {
+      filasInput.value = String(state.canvas.rows);
+    }
     renderGrid();
   }
 

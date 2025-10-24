@@ -188,6 +188,8 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.35);
     cursor: grab;
     user-select: none;
+    overflow: hidden;
+    isolation: isolate;
   }
 
   .grid-item[data-tipo="ESTIBA"] {
@@ -195,11 +197,83 @@
   }
 
   .grid-item[data-tipo="PASILLO"] {
-    background: linear-gradient(145deg, #475569 0%, #1f2937 100%);
+    background: #334155;
   }
 
   .grid-item--pasillo {
     z-index: 3;
+    overflow: hidden;
+  }
+
+  .grid-item--pasillo::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.9;
+  }
+
+  .grid-item--pasillo[data-orientation="vertical"]::after {
+    left: 50%;
+    top: 10px;
+    bottom: 10px;
+    width: 0;
+    border-left: 2px dashed #facc15;
+    transform: translateX(-50%);
+  }
+
+  .grid-item--pasillo[data-orientation="horizontal"]::after {
+    top: 50%;
+    left: 10px;
+    right: 10px;
+    height: 0;
+    border-top: 2px dashed #facc15;
+    transform: translateY(-50%);
+  }
+
+  .grid-item--pasillo[data-orientation="square"]::after {
+    left: 50%;
+    top: 10px;
+    bottom: 10px;
+    width: 0;
+    border-left: 2px dashed #facc15;
+    transform: translateX(-50%);
+  }
+
+  .pasillo-cross-overlay {
+    position: absolute;
+    inset: 6px;
+    border-radius: 10px;
+    pointer-events: none;
+    z-index: 6;
+    background: rgba(51, 65, 85, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .pasillo-cross-overlay::before,
+  .pasillo-cross-overlay::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    background: none;
+  }
+
+  .pasillo-cross-overlay::before {
+    top: 50%;
+    left: 10px;
+    right: 10px;
+    border-top: 2px dashed #facc15;
+    /*transform: translateY(-50%);*/
+  }
+
+  .pasillo-cross-overlay::after {
+    left: 50%;
+    top: 10px;
+    bottom: 10px;
+    border-left: 2px dashed #facc15;
+    /*transform: translateX(-50%);*/
   }
 
   .grid-item--span {
@@ -222,6 +296,7 @@
     justify-content: center;
     cursor: pointer;
     transition: background 0.2s ease;
+    z-index: 3;
   }
 
   .grid-item-remove:hover {
@@ -235,11 +310,15 @@
   .grid-item strong {
     font-size: 0.92rem;
     font-weight: 600;
+    position: relative;
+    z-index: 2;
   }
 
   .grid-item span {
     font-size: 0.72rem;
     opacity: 0.85;
+    position: relative;
+    z-index: 2;
   }
 
   .layout-sidebar {
