@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="es">
   <head>
@@ -119,7 +120,6 @@
         width: var(--sidebar-current-width);
         background: var(--color-surface-alt);
         border-right: 1px solid var(--color-border);
-        transition: width var(--transition-base);
         padding: 1.4rem 1rem;
         display: flex;
         flex-direction: column;
@@ -150,7 +150,6 @@
         letter-spacing: 0.08em;
         color: var(--color-text-muted);
         margin: 0;
-        transition: opacity var(--transition-base);
       }
 
       body.app-sidebar-collapsed .sidebar-section-title {
@@ -208,7 +207,6 @@
       .sidebar-link-label {
         flex: 1;
         white-space: nowrap;
-        transition: opacity var(--transition-base);
       }
 
       body.app-sidebar-collapsed .sidebar-link {
@@ -246,7 +244,6 @@
         }
         body.app-sidebar-collapsed .app-sidebar {
           transform: translateX(-100%);
-          transition: transform var(--transition-base);
         }
         body.app-sidebar-collapsed .sidebar-backdrop {
           display: none;
@@ -272,6 +269,17 @@
     </style>
   </head>
   <body class="app-sidebar-collapsed">
+    <script>
+      // Restaurar antes de crear el menu evita mostrar un estado intermedio.
+      try {
+        document.body.classList.toggle(
+          "app-sidebar-collapsed",
+          window.localStorage.getItem("inventario-sidebar-collapsed") !== "0",
+        );
+      } catch (_) {
+        // Mantener el estado cerrado si el almacenamiento no esta disponible.
+      }
+    </script>
     <div class="app-shell">
       <header class="app-header">
         <div class="app-brand">
@@ -284,6 +292,8 @@
             class="sidebar-toggle"
             id="sidebarToggle"
             aria-label="Mostrar u ocultar navegación"
+            aria-controls="appSidebar"
+            aria-expanded="false"
           >
             ☰
           </button>
@@ -305,11 +315,41 @@
               </li>
               <li>
                 <a
-                  href="{% url 'articulos' %}"
-                  class="sidebar-link{% if request and request.path == '/inventario/articulos/' %} is-active{% endif %}"
+                  href="{% url 'gestion_articulos' %}"
+                  class="sidebar-link{% if request.resolver_match.url_name == 'gestion_articulos' %} is-active{% endif %}"
                 >
                   <span class="sidebar-link-icon">📦</span>
                   <span class="sidebar-link-label">Artículos</span>
+                </a>
+              </li>
+              <li>
+                <a href="{% url 'almacenar' %}" class="sidebar-link{% if request.resolver_match.url_name == 'almacenar' %} is-active{% endif %}">
+                  <span class="sidebar-link-icon" aria-hidden="true">↓</span>
+                  <span class="sidebar-link-label">Almacenar</span>
+                </a>
+              </li>
+              <li>
+                <a href="{% url 'picking' %}" class="sidebar-link{% if request.resolver_match.url_name == 'picking' %} is-active{% endif %}">
+                  <span class="sidebar-link-icon" aria-hidden="true">↑</span>
+                  <span class="sidebar-link-label">Picking</span>
+                </a>
+              </li>
+              <li>
+                <a href="{% url 'historial_movimientos' %}" class="sidebar-link{% if request.resolver_match.url_name == 'historial_movimientos' %} is-active{% endif %}">
+                  <span class="sidebar-link-icon" aria-hidden="true">↔</span>
+                  <span class="sidebar-link-label">Histórico de movimientos</span>
+                </a>
+              </li>
+              <li>
+                <a href="{% url 'traslados' %}" class="sidebar-link{% if request.resolver_match.url_name == 'traslados' %} is-active{% endif %}">
+                  <span class="sidebar-link-icon" aria-hidden="true">⇄</span>
+                  <span class="sidebar-link-label">Traslados</span>
+                </a>
+              </li>
+              <li>
+                <a href="{% url 'ayuda_nomenclatura' %}" class="sidebar-link{% if request.resolver_match.url_name == 'ayuda_nomenclatura' %} is-active{% endif %}">
+                  <span class="sidebar-link-icon" aria-hidden="true">?</span>
+                  <span class="sidebar-link-label">Guía de nomenclatura</span>
                 </a>
               </li>
             </ul>
@@ -358,6 +398,7 @@
         </aside>
         <div class="sidebar-backdrop"></div>
         <main class="app-content">
+          <script src="{% static 'js/bodega_seleccion.js' %}?v=20261005-bodegas-independientes"></script>
           {% block container %}{% endblock container %}
         </main>
       </div>
@@ -375,6 +416,11 @@
         function setCollapsed(collapsed, { persist = true } = {}) {
           const shouldCollapse = Boolean(collapsed);
           body.classList.toggle("app-sidebar-collapsed", shouldCollapse);
+          toggleBtn?.setAttribute("aria-expanded", String(!shouldCollapse));
+          if (sidebar) {
+            sidebar.inert = shouldCollapse;
+            sidebar.setAttribute("aria-hidden", String(shouldCollapse));
+          }
           if (persist) {
             try {
               window.localStorage.setItem(STORAGE_KEY, shouldCollapse ? "1" : "0");
@@ -406,14 +452,7 @@
           });
         }
 
-        try {
-          const stored = window.localStorage.getItem(STORAGE_KEY);
-          if (stored === "0") {
-            setCollapsed(false, { persist: false });
-          }
-        } catch (error) {
-          // Ignorar errores de localStorage
-        }
+        setCollapsed(body.classList.contains("app-sidebar-collapsed"), { persist: false });
       })();
     </script>
     {% block extra_scripts %}{% endblock extra_scripts %}

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Histórico de movimientos · Inventario{% endblock %}
+{% block container %}
+<style>
+  .history-page { padding: 2rem 3vw; color: #0f172a; }
+  .history-page h1 { margin: 0 0 .5rem; }
+  .history-description, .history-note { color: #64748b; }
+  .history-card { padding: 1.4rem; background: white; border: 1px solid #e2e8f0; border-radius: 14px; margin: 1.3rem 0; }
+  .history-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; align-items: end; }
+  .history-field { display: flex; flex-direction: column; gap: .4rem; }
+  .history-field label { font-weight: 600; }
+  .history-field input, .history-field select { width: 100%; box-sizing: border-box; padding: .65rem; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }
+  .history-page button, .history-action { display: inline-block; padding: .65rem 1rem; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #0f172a; text-decoration: none; font: inherit; cursor: pointer; }
+  .history-page button { background: #2563eb; color: white; border-color: #2563eb; }
+  .history-metrics { display: flex; flex-wrap: wrap; gap: 1.5rem; }
+  .history-metrics strong { display: block; font-size: 1.4rem; margin-top: .4rem; }
+  .history-table-wrap { overflow: auto; }
+  .history-table { width: 100%; border-collapse: collapse; }
+  .history-table th, .history-table td { text-align: left; padding: .8rem; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  .history-table th { background: #f8fafc; white-space: nowrap; }
+  .history-table small { display: block; color: #64748b; margin-top: .3rem; }
+  .history-entrada { color: #15803d; font-weight: 600; }
+  .history-traslado { color: #1d4ed8; font-weight: 600; }
+  .history-salida { color: #b91c1c; font-weight: 600; }
+  .history-errors { color: #b91c1c; margin: .25rem 0; padding-left: 1.2rem; }
+  .history-pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-top: 1.2rem; }
+</style>
+<section class="history-page">
+  <header>
+    <h1>Histórico de movimientos</h1>
+    <p class="history-description">Consulta las entradas, salidas y traslados registrados, ordenadas de la más reciente a la más antigua.</p>
+  </header>
+  <form method="get" class="history-card history-filters" id="filtrosHistorial">
+    {% for field in form %}
+      <div class="history-field">
+        {{ field.label_tag }}{{ field }}
+        {% if field.errors %}<ul class="history-errors">{% for error in field.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+    {% endfor %}
+    <div><button type="submit">Buscar</button> <a href="{% url 'historial_movimientos' %}" class="history-action">Limpiar</a></div>
+    {{ form.non_field_errors }}
+  </form>
+  <section class="history-card history-metrics" aria-label="Resumen de la consulta">
+    <div>Registros encontrados<strong>{{ pagina.paginator.count }}</strong></div>
+    <div>Entradas<strong>{{ resumen.ENTRADA.registros }} registros · {{ resumen.ENTRADA.unidades|default_if_none:0 }} unidades</strong></div>
+    <div>Salidas<strong>{{ resumen.SALIDA.registros }} registros · {{ resumen.SALIDA.unidades|default_if_none:0 }} unidades</strong></div>
+    <div>Traslados<strong>{{ resumen.TRASLADO.registros }} registros · {{ resumen.TRASLADO.unidades|default_if_none:0 }} unidades</strong></div>
+  </section>
+  <p class="history-note">Los totales corresponden a los movimientos filtrados; no representan el saldo actual. Las cantidades pueden corresponder a unidades de medida distintas.</p>
+  <section class="history-card">
+    <div class="history-table-wrap">
+      <table class="history-table" id="tablaHistorial">
+        <thead><tr><th>Referencia</th><th>Fecha</th><th>Movimiento</th><th>Artículo</th><th>Cantidad</th><th>Bodega</th><th>Ubicación / caja</th></tr></thead>
+        <tbody>
+          {% for registro in pagina %}
+            <tr data-tipo="{{ registro.h_tipo }}" data-articulo="{{ registro.h_articulo_id_historial }}">
+              <td>{% if registro.h_tipo == 'ENTRADA' %}E{% elif registro.h_tipo == 'SALIDA' %}S{% else %}T{% endif %}-{{ registro.h_id }}</td>
+              <td>{{ registro.h_fecha|date:"d/m/Y H:i:s" }}</td>
+              <td class="history-{{ registro.h_tipo|lower }}">{% if registro.h_tipo == 'ENTRADA' %}Entrada{% elif registro.h_tipo == 'SALIDA' %}Salida{% else %}Traslado{% endif %}</td>
+              <td>{{ registro.h_articulo_id_historial }} · {{ registro.h_descripcion_articulo|default:registro.h_descripcion_actual }}</td>
+              <td>{% if registro.h_tipo == 'ENTRADA' %}+{% elif registro.h_tipo == 'SALIDA' %}−{% endif %}{{ registro.h_cantidad }}</td>
+              {% if registro.h_tipo == 'TRASLADO' %}
+                <td>{{ registro.h_nombre_bodega }} → {{ registro.h_nombre_bodega_destino }}</td>
+                <td>{{ registro.h_codigo_ubicacion }} → {{ registro.h_codigo_destino }}<small>Origen: {{ registro.h_ruta_ubicacion }}</small><small>Destino: {{ registro.h_ruta_destino }}</small></td>
+              {% elif registro.h_bodega_movimiento_id %}
+                <td>{{ registro.h_nombre_bodega }}</td>
+                <td>{{ registro.h_codigo_ubicacion }}<small>{{ registro.h_ruta_ubicacion }}</small></td>
+              {% elif registro.h_ubicacion_id %}
+                <td>{{ registro.h_bodega_actual }}<small>Bodega actual; sin dato histórico</small></td>
+                <td>{{ registro.h_codigo_actual|default:registro.h_ubicacion_id }} · {{ registro.h_ubicacion_actual }}<small>Ubicación actual; sin ruta histórica</small></td>
+              {% else %}
+                <td>Sin dato histórico</td><td>No registrada</td>
+              {% endif %}
+            </tr>
+          {% empty %}<tr><td colspan="7">No hay movimientos para los filtros indicados.</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <nav class="history-pagination" aria-label="Páginas del histórico">
+      {% if pagina.has_previous %}<a class="history-action" href="?{{ parametros }}&amp;page={{ pagina.previous_page_number }}">Anterior</a>{% endif %}
+      <span>Página {{ pagina.number }} de {{ pagina.paginator.num_pages }} · 50 registros por página</span>
+      {% if pagina.has_next %}<a class="history-action" href="?{{ parametros }}&amp;page={{ pagina.next_page_number }}">Siguiente</a>{% endif %}
+    </nav>
+  </section>
+</section>
+{% endblock %}

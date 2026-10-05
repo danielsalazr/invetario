@@ -452,16 +452,35 @@
       const nombre = document.createElement("span");
       nombre.textContent = escaparHtml(contenedor.nombre || "Contenedor");
       const etiqueta = document.createElement("span");
-      const identificador =
+      const identificador = contenedor.codigo_contenedor || (
         contenedor.nomenclatura && contenedor.nomenclatura !== ""
           ? contenedor.nomenclatura
           : contenedor.numero != null
             ? contenedor.numero
-            : "";
+            : "");
       etiqueta.textContent = escaparHtml(String(identificador));
       chip.appendChild(nombre);
       chip.appendChild(etiqueta);
+      chip.tabIndex = 0;
+      chip.setAttribute("role", "button");
+      chip.setAttribute("aria-label", `Ver contenido de ${identificador || contenedor.nombre}`);
+      chip.addEventListener("click", (event) => {
+        event.stopPropagation();
+        mostrarDetalleUbicacion(contenedor);
+      });
+      chip.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          event.stopPropagation();
+          mostrarDetalleUbicacion(contenedor);
+        }
+      });
       wrap.appendChild(chip);
+      if ((contenedor.hijos || []).length) {
+        const internos = construirContenedores(contenedor.hijos);
+        internos.style.marginLeft = "1rem";
+        wrap.appendChild(internos);
+      }
     });
     return wrap;
   }
@@ -750,10 +769,11 @@ function construirNivelBase(estante, contenedores) {
 
     const contenedoresDirectos = filtrarPorTipo(estante, "CONTENEDOR").length;
 
+    const contarContenedores = (nodo) => (nodo.tipo === "CONTENEDOR" ? 1 : 0) + (nodo.hijos || []).reduce((total, hijo) => total + contarContenedores(hijo), 0);
     return {
       panelesCantidad: paneles.length,
       divisionesCantidad: divisiones,
-      contenedoresCantidad: contenedoresDirectos + contenedoresEnPaneles,
+      contenedoresCantidad: contarContenedores(estante),
       contenedoresDirectos,
       paneles,
     };
@@ -1029,6 +1049,11 @@ function construirNivelBase(estante, contenedores) {
       contenido.appendChild(grid);
     }
 
+    if ((bodega.contenedoresRaiz || []).length) {
+      const tituloContenedores = document.createElement("h3");
+      tituloContenedores.textContent = "Contenedores sin ubicación fija asignada";
+      contenido.append(tituloContenedores, construirContenedores(bodega.contenedoresRaiz));
+    }
     card.appendChild(contenido);
     return card;
   }
@@ -1051,6 +1076,8 @@ function construirNivelBase(estante, contenedores) {
       divisionesTotal += datos.divisionesCantidad;
       contenedoresTotal += datos.contenedoresCantidad;
     });
+    const contarCajas = (nodo) => 1 + (nodo.hijos || []).reduce((total, hijo) => total + contarCajas(hijo), 0);
+    contenedoresTotal += (bodega.contenedoresRaiz || []).reduce((total, nodo) => total + contarCajas(nodo), 0);
 
     mapaResumen.innerHTML = `
       <strong>${escaparHtml(bodega.nombre || "Bodega")}</strong>${BULLET}
@@ -1179,6 +1206,15 @@ function construirNivelBase(estante, contenedores) {
 
       const estantes = recolectarEstantes(ubicaciones);
       state.bodegasAgrupadas = agruparPorBodega(estantes);
+      ubicaciones.filter((nodo) => nodo.tipo === "CONTENEDOR").forEach((nodo) => {
+        const bodegaId = normalizarId(nodo.bodega);
+        if (!state.bodegasAgrupadas.has(bodegaId)) {
+          state.bodegasAgrupadas.set(bodegaId, { id: bodegaId, nombre: state.bodegasCatalogo.get(bodegaId), estantes: [] });
+        }
+        const grupo = state.bodegasAgrupadas.get(bodegaId);
+        grupo.contenedoresRaiz ||= [];
+        grupo.contenedoresRaiz.push(nodo);
+      });
 
       const listaOrdenada = Array.from(state.bodegasAgrupadas.values()).sort(
         (a, b) => (a.nombre || "").localeCompare(b.nombre || ""),

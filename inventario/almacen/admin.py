@@ -26,11 +26,38 @@ class UbicacionAdmin(admin.ModelAdmin):
         "bodega",
         "padre",
         "nomenclatura",
+        "codigo_contenedor",
     )
     list_filter = ("tipo", "bodega")
-    search_fields = ("nombre", "nomenclatura", "numero__exact", "bodega__nombre")
+    search_fields = ("nombre", "codigo_contenedor", "nomenclatura", "numero__exact", "bodega__nombre")
     autocomplete_fields = ("padre", "bodega")
-    readonly_fields = ("numero", "nivel", "creado_en", "actualizado_en")
+    readonly_fields = ("codigo_contenedor", "numero", "nivel", "creado_en", "actualizado_en")
+
+    def save_model(self, request, obj, form, change):
+        if change and obj.es_movil:
+            anterior = models.Ubicacion.objects.get(pk=obj.pk)
+            if anterior.padre_id != obj.padre_id or anterior.bodega_id != obj.bodega_id:
+                from .services import mover_contenedor
+                mover_contenedor(obj, obj.padre_id, obj.bodega_id, request.user)
+                return
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(models.MovimientoContenedor)
+class MovimientoContenedorAdmin(admin.ModelAdmin):
+    list_display = ("contenedor", "contenedor_principal", "bodega_origen", "bodega_destino", "fecha")
+    list_filter = ("bodega_origen", "bodega_destino")
+    search_fields = ("contenedor__codigo_contenedor", "ruta_origen", "ruta_destino")
+    readonly_fields = tuple(field.name for field in models.MovimientoContenedor._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(models.Marca)

@@ -37,6 +37,8 @@ class InventarioSerializer(serializers.ModelSerializer):
         bodega = getattr(ubicacion, "bodega", None)
         return {
             "id": ubicacion.id,
+            "codigo_contenedor": ubicacion.codigo_contenedor,
+            "es_movil": ubicacion.es_movil,
             "nombre": ubicacion.nombre,
             "nomenclatura": ubicacion.nomenclatura,
             "numero": ubicacion.numero,
@@ -47,6 +49,7 @@ class InventarioSerializer(serializers.ModelSerializer):
             else ubicacion.tipo,
             "ruta": ubicacion.ruta if hasattr(ubicacion, "ruta") else ubicacion.nombre,
             "bodega": bodega.nombre if bodega else None,
+            "bodega_id": bodega.pk if bodega else None,
         }
 
 
@@ -145,6 +148,9 @@ class InventarioEntradaSerializer(serializers.Serializer):
         cantidad = self.validated_data["cantidad"]
 
         with transaction.atomic():
+            # Evitar entradas duplicadas cuando aun no hay una fila de inventario.
+            list(models.Bodega.objects.select_for_update().order_by("pk").values_list("pk", flat=True))
+            models.Articulo.objects.select_for_update().get(pk=articulo.pk)
             inventario_qs = models.Inventario.objects.select_for_update().filter(
                 articulos=articulo,
                 Ubicacion=ubicacion,
@@ -152,7 +158,7 @@ class InventarioEntradaSerializer(serializers.Serializer):
 
             inventario = inventario_qs.first()
             if inventario:
-                inventario_qs.update(cantidad=F("cantidad") + cantidad)
+                models.Inventario.objects.filter(pk=inventario.pk).update(cantidad=F("cantidad") + cantidad)
                 inventario.refresh_from_db(fields=["cantidad"])
                 created = False
             else:
@@ -166,11 +172,89 @@ class InventarioEntradaSerializer(serializers.Serializer):
             models.Entradas.objects.create(
                 articulo=articulo,
                 cantidad=cantidad,
+                ubicacion=ubicacion,
             )
 
         self.instance = inventario
         self.created = created
         return inventario
+
+
+class InventarioSalidaSerializer(serializers.Serializer):
+    ubicacion = serializers.PrimaryKeyRelatedField(queryset=models.Ubicacion.objects.all())
+    cantidad = serializers.IntegerField(min_value=1)
+
+    def save(self, **kwargs):
+        articulo = self.context["articulo"]
+        ubicacion = self.validated_data["ubicacion"]
+        cantidad = self.validated_data["cantidad"]
+        with transaction.atomic():
+            list(models.Bodega.objects.select_for_update().order_by("pk").values_list("pk", flat=True))
+            models.Articulo.objects.select_for_update().get(pk=articulo.pk)
+            registros = list(models.Inventario.objects.select_for_update().filter(
+                articulos=articulo, Ubicacion=ubicacion,
+            ).order_by("id"))
+            disponible = sum(registro.cantidad for registro in registros)
+            if any(registro.cantidad < 0 for registro in registros):
+                raise serializers.ValidationError({"cantidad": "El inventario de esta ubicacion requiere revision: hay cantidades negativas."})
+            if cantidad > disponible:
+                raise serializers.ValidationError({"cantidad": f"Solo hay {disponible} unidades disponibles en esta ubicacion."})
+            pendiente = cantidad
+            for registro in registros:
+                retirar = min(registro.cantidad, pendiente)
+                if retirar:
+                    registro.cantidad -= retirar
+                    registro.save(update_fields=["cantidad"])
+                    pendiente -= retirar
+                if pendiente == 0:
+                    break
+            salida = models.Salidas.objects.create(Articulo=articulo, cantidad=cantidad, ubicacion=ubicacion)
+        return {
+            "salida": salida.pk, "articulo": articulo.pk, "ubicacion": ubicacion.pk,
+            "cantidad_retirada": cantidad, "cantidad_disponible": disponible - cantidad,
+        }
+
+
+class InventarioTrasladoSerializer(serializers.Serializer):
+    origen = serializers.PrimaryKeyRelatedField(queryset=models.Ubicacion.objects.all())
+    destino = serializers.PrimaryKeyRelatedField(queryset=models.Ubicacion.objects.all())
+    cantidad = serializers.IntegerField(min_value=1)
+
+    def validate(self, attrs):
+        if attrs["origen"].pk == attrs["destino"].pk:
+            raise serializers.ValidationError({"destino": "El destino debe ser distinto del origen."})
+        return attrs
+
+    def save(self, **kwargs):
+        from .traslados import trasladar_articulo
+        traslado, inventario_destino, saldo = trasladar_articulo(
+            self.context["articulo"].pk, self.validated_data["origen"].pk,
+            self.validated_data["destino"].pk, self.validated_data["cantidad"],
+            usuario=self.context["request"].user,
+        )
+        return {
+            "traslado": traslado.pk, "articulo": traslado.articulo_id,
+            "origen": traslado.origen_id, "destino": traslado.destino_id,
+            "cantidad": traslado.cantidad, "cantidad_disponible_origen": saldo,
+            "inventario_destino": InventarioSerializer(inventario_destino).data,
+        }
+
+
+class FilaTrasladoSerializer(InventarioTrasladoSerializer):
+    articulo = serializers.PrimaryKeyRelatedField(queryset=models.Articulo.objects.all())
+
+
+class LoteTrasladosSerializer(serializers.Serializer):
+    movimientos = FilaTrasladoSerializer(many=True, allow_empty=False, max_length=100)
+
+    def save(self, **kwargs):
+        from .traslados import trasladar_lote
+        resultados = trasladar_lote(self.validated_data["movimientos"], self.context["request"].user)
+        return {"registrados": len(resultados), "movimientos": [{
+            "traslado": traslado.pk, "articulo": traslado.articulo_id,
+            "origen": traslado.origen_id, "destino": traslado.destino_id, "cantidad": traslado.cantidad,
+            "cantidad_disponible_origen": saldo, "inventario_destino": InventarioSerializer(inventario_destino).data,
+        } for traslado, inventario_destino, saldo in resultados]}
 
 
 class FotosArticulosSerializer(serializers.ModelSerializer):
@@ -190,6 +274,8 @@ class UbicacionTreeSerializer(serializers.ModelSerializer):
         model = models.Ubicacion
         fields = [
             "id",
+            "codigo_contenedor",
+            "es_movil",
             "nombre",
             "numero",
             "tipo",
@@ -242,6 +328,36 @@ class UbicacionCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         return models.Ubicacion.objects.create(**validated_data)
+
+
+class MoverContenedorSerializer(serializers.Serializer):
+    destino = serializers.PrimaryKeyRelatedField(queryset=models.Ubicacion.objects.all(), allow_null=True)
+    bodega = serializers.PrimaryKeyRelatedField(queryset=models.Bodega.objects.all(), required=False)
+
+    def validate(self, attrs):
+        destino = attrs.get("destino")
+        bodega = attrs.get("bodega")
+        if destino is None and bodega is None:
+            raise serializers.ValidationError({"bodega": "Selecciona una bodega para dejar el contenedor sin padre."})
+        if destino and bodega and destino.bodega_id != bodega.pk:
+            raise serializers.ValidationError({"bodega": "La bodega no coincide con la del destino."})
+        return attrs
+
+
+class MovimientoContenedorSerializer(serializers.ModelSerializer):
+    bodega_origen_nombre = serializers.CharField(source="bodega_origen.nombre", read_only=True)
+    bodega_destino_nombre = serializers.CharField(source="bodega_destino.nombre", read_only=True)
+    codigo_contenedor_principal = serializers.CharField(source="contenedor_principal.codigo_contenedor", read_only=True)
+    usuario_nombre = serializers.CharField(source="usuario.username", read_only=True, default=None)
+
+    class Meta:
+        model = models.MovimientoContenedor
+        fields = [
+            "id", "fecha", "origen", "destino", "bodega_origen", "bodega_destino",
+            "bodega_origen_nombre", "bodega_destino_nombre", "ruta_origen", "ruta_destino",
+            "contenedor_principal", "codigo_contenedor_principal", "usuario_nombre",
+        ]
+        read_only_fields = fields
 
 
 class EstantesLoteSerializer(serializers.Serializer):

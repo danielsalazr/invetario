@@ -56,12 +56,43 @@
   }
 
   .tree-container {
-    height: 100%;
+    position: sticky;
+    top: calc(var(--header-height, 64px) + 1rem);
+    height: calc(100dvh - var(--header-height, 64px) - 3rem);
+    align-self: start;
+    min-height: 380px;
+    overflow: hidden;
+  }
+
+  .tree-container > header,
+  .tree-controls {
+    flex-shrink: 0;
+    background: #fff;
+  }
+
+  .tree-bodega-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 1rem 1.25rem 0;
+  }
+
+  .tree-bodega-filter select {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.65rem;
+    background: #fff;
+    font: inherit;
   }
 
   .tree-scroll {
+    flex: 1;
+    min-height: 0;
     padding: 1rem 1.25rem;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
   }
 
   .tree-search {
@@ -72,6 +103,7 @@
 
   .tree-search input {
     flex: 1;
+    min-width: 0;
     border-radius: 999px;
     border: 1px solid var(--border);
     padding: 0.6rem 1rem;
@@ -508,6 +540,16 @@
     padding: 2rem 1rem;
   }
 
+  .movement-section {
+    border-top: 1px solid var(--border);
+    margin-top: 1rem;
+    padding-top: 1rem;
+  }
+
+  .movement-section p { font-size: 0.85rem; overflow-wrap: anywhere; }
+  .movement-entry { border-bottom: 1px solid var(--border); padding: 0.8rem 0; }
+  .movement-entry p { margin: 0.35rem 0; }
+
   .tag {
     display: inline-flex;
     align-items: center;
@@ -524,6 +566,10 @@
     .layout {
       grid-template-columns: 1fr;
     }
+    .tree-container {
+      position: static;
+      height: min(75dvh, 650px);
+    }
   }
 </style>
 
@@ -531,22 +577,31 @@
   <aside class="card tree-container">
     <header>
       <h2>Mapa de ubicaciones</h2>
-      <p>Explora la jerarquía completa y selecciona un nodo para relacionarlo como padre.</p>
+      <p>Explora ubicaciones fijas y contenedores móviles. Selecciona una caja para moverla con todo su contenido.</p>
     </header>
+    <div class="tree-controls">
+    <div class="tree-bodega-filter">
+      <label for="bodegaMapa">Bodega a consultar *</label>
+      <select id="bodegaMapa" aria-controls="arbolUbicaciones" disabled>
+        <option value="">Selecciona una bodega</option>
+      </select>
+    </div>
     <div class="tree-search">
       <input
         type="search"
         id="buscarUbicacion"
-        placeholder="Buscar por nombre o tipo..."
+        placeholder="Buscar por nombre, código o tipo..."
         autocomplete="off"
+        disabled
       />
-      <button type="button" id="limpiarBusquedaUbicacion">Limpiar</button>
+      <button type="button" id="limpiarBusquedaUbicacion" disabled>Limpiar</button>
     </div>
     <div class="tree-actions">
       <button
         type="button"
         class="tree-action-btn"
         id="colapsarTodoUbicaciones"
+        disabled
       >
         Colapsar todo
       </button>
@@ -559,9 +614,10 @@
         Deshacer colapso
       </button>
     </div>
+    </div>
     <div class="tree-scroll" id="treeWrapper">
-      <div class="tree-empty" id="treeEmptyState">
-        No hay ubicaciones registradas. Crea la primera desde el formulario.
+      <div class="tree-empty" id="treeEmptyState" role="status" aria-live="polite">
+        Selecciona una bodega para ver sus ubicaciones.
       </div>
       <ul class="tree" id="arbolUbicaciones"></ul>
     </div>
@@ -569,8 +625,8 @@
 
   <section class="card">
     <header>
-      <h2>Crear nueva ubicación</h2>
-      <p>Define el tipo, asigna un padre válido y registra la ubicación dentro de la bodega correspondiente.</p>
+      <h2>Crear ubicación o contenedor</h2>
+      <p>Los contenedores reciben un código permanente y pueden guardarse en ubicaciones fijas o dentro de otros contenedores.</p>
     </header>
     <form id="formUbicacion" class="form-wrapper" novalidate>
       {% csrf_token %}
@@ -617,13 +673,13 @@
       </div>
 
       <div class="form-group">
-        <label for="nomenclatura">Nomenclatura</label>
+        <label for="nomenclatura">Nomenclatura de ubicación</label>
         <input
           type="text"
-          name="nomenclatura"
           id="nomenclatura"
           maxlength="50"
-          placeholder="Código interno opcional"
+          readonly
+          placeholder="Se calcula según su posición"
         />
       </div>
 
@@ -647,7 +703,7 @@
       </div>
 
       <p style="margin:0; color:var(--text-muted); font-size:0.8rem;">
-        * Campos obligatorios. Los tipos definen la profundidad máxima (Estante → Panel → División → Contenedor).
+        * Campos obligatorios. Las cajas conservan su código al cambiar de lugar; su ruta muestra dónde encontrarlas.
       </p>
     </form>
   </section>
@@ -669,6 +725,8 @@
   window.ubicacionesConfig = {
     endpoints: {
       ubicaciones: "{% url 'ubicaciones_api' %}",
+      mover: "{% url 'mover_contenedor' 0 %}",
+      movimientos: "{% url 'movimientos_contenedor' 0 %}",
     },
   };
 </script>

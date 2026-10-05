@@ -1,6 +1,7 @@
 from collections import defaultdict
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Sum
 from django.db.models.functions import Coalesce
@@ -25,17 +26,65 @@ from .models import (
 from .serializers import (
     ArticuloSerializer,
     InventarioEntradaSerializer,
+    InventarioSalidaSerializer,
+    InventarioTrasladoSerializer,
+    LoteTrasladosSerializer,
     InventarioSerializer,
     MarcaSerializer,
     UnidadMedidaSerializer,
     UbicacionCreateSerializer,
     UbicacionTreeSerializer,
     EstantesLoteSerializer,
+    MoverContenedorSerializer,
+    MovimientoContenedorSerializer,
 )
+from .services import mover_contenedor
+from .historial import consultar_historial
+from .historial_forms import HistorialArticulosForm
 
 
 def articulo(request):
     return render(request, "inventario/index.html", {})
+
+
+def gestion_articulos(request):
+    return render(request, "inventario/articulos_gestion.html", {})
+
+
+def almacenar(request):
+    return render(request, "inventario/movimiento_inventario.html", {
+        "operacion": "almacenar", "titulo": "Almacenar", "accion": "Registrar entrada",
+        "descripcion": "Registra la entrada de articulos en una ubicacion fija o un contenedor.",
+    })
+
+
+def picking(request):
+    return render(request, "inventario/movimiento_inventario.html", {
+        "operacion": "picking", "titulo": "Picking", "accion": "Registrar salida",
+        "descripcion": "Retira articulos de una ubicacion o caja y descuenta sus existencias.",
+    })
+
+
+def trasladar(request):
+    return render(request, "inventario/movimiento_inventario.html", {
+        "operacion": "trasladar", "titulo": "Traslados", "accion": "Preparar traslado",
+        "descripcion": "Selecciona la bodega de destino y registra un movimiento individual o prepara varios movimientos en una tabla.",
+    })
+
+
+def historial_movimientos(request):
+    form = HistorialArticulosForm(request.GET)
+    resumen = {tipo: {"registros": 0, "unidades": 0} for tipo in ("ENTRADA", "SALIDA", "TRASLADO")}
+    registros = []
+    if form.is_valid():
+        registros, resumen = consultar_historial(form.cleaned_data)
+    pagina = Paginator(registros, 50).get_page(request.GET.get("page"))
+    parametros = request.GET.copy()
+    parametros.pop("page", None)
+    return render(request, "inventario/historial_articulos.html", {
+        "form": form, "pagina": pagina, "resumen": resumen,
+        "parametros": parametros.urlencode(),
+    })
 
 
 def distribucion_ubicaciones(request):
@@ -115,6 +164,25 @@ class Articulos(APIView):
         return Response(respuesta, status=status.HTTP_201_CREATED)
 
 
+class LoteTrasladosView(APIView):
+    renderer_classes = [JSONRenderer]
+
+    def post(self, request):
+        serializer = LoteTrasladosSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.save(), status=status.HTTP_201_CREATED)
+
+
+class ArticuloTrasladoView(APIView):
+    renderer_classes = [JSONRenderer]
+
+    def post(self, request, articulo_id):
+        articulo = get_object_or_404(Articulo, pk=articulo_id)
+        serializer = InventarioTrasladoSerializer(data=request.data, context={"articulo": articulo, "request": request})
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.save(), status=status.HTTP_201_CREATED)
+
+
 class MarcasView(APIView):
     renderer_classes = [JSONRenderer]
     def get(self, request):
@@ -161,6 +229,16 @@ class ArticuloInventarioView(APIView):
 
         codigo = status.HTTP_201_CREATED if getattr(serializer, "created", False) else status.HTTP_200_OK
         return Response(respuesta, status=codigo)
+
+
+class ArticuloSalidaView(APIView):
+    renderer_classes = [JSONRenderer]
+
+    def post(self, request, articulo_id):
+        articulo = get_object_or_404(Articulo, pk=articulo_id)
+        serializer = InventarioSalidaSerializer(data=request.data, context={"articulo": articulo})
+        serializer.is_valid(raise_exception=True)
+        return Response(serializer.save(), status=status.HTTP_201_CREATED)
 
 
 def ubicaciones(request):
@@ -258,6 +336,36 @@ class UbicacionesView(APIView):
         ).data
 
         return Response(nodo, status=status.HTTP_201_CREATED)
+
+
+class MoverContenedorView(APIView):
+    renderer_classes = [JSONRenderer]
+
+    def post(self, request, ubicacion_id):
+        contenedor = get_object_or_404(Ubicacion, pk=ubicacion_id)
+        serializer = MoverContenedorSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        destino = serializer.validated_data["destino"]
+        bodega = serializer.validated_data.get("bodega")
+        try:
+            contenedor = mover_contenedor(
+                contenedor, destino.pk if destino else None,
+                bodega.pk if bodega else None, request.user,
+            )
+        except DjangoValidationError as exc:
+            return Response(exc.message_dict, status=status.HTTP_400_BAD_REQUEST)
+        return Response(UbicacionTreeSerializer(contenedor).data)
+
+
+class MovimientosContenedorView(APIView):
+    renderer_classes = [JSONRenderer]
+
+    def get(self, request, ubicacion_id):
+        contenedor = get_object_or_404(Ubicacion, pk=ubicacion_id, tipo=Ubicacion.Tipo.CONTENEDOR)
+        movimientos = contenedor.movimientos.select_related(
+            "bodega_origen", "bodega_destino", "contenedor_principal", "usuario",
+        )
+        return Response(MovimientoContenedorSerializer(movimientos, many=True).data)
 
 
 class CrearEstantesLoteView(APIView):
@@ -789,6 +897,7 @@ class UbicacionInventarioDetalleView(APIView):
                     },
                     "ubicacion": {
                         "id": ubicacion_item.id if ubicacion_item else None,
+                        "codigo_contenedor": ubicacion_item.codigo_contenedor if ubicacion_item else None,
                         "nombre": ubicacion_item.nombre if ubicacion_item else "",
                     "nomenclatura": (
                         ubicacion_item.nomenclatura if ubicacion_item else ""
@@ -824,6 +933,7 @@ class UbicacionInventarioDetalleView(APIView):
         respuesta = {
             "ubicacion": {
                 "id": ubicacion.id,
+                "codigo_contenedor": ubicacion.codigo_contenedor,
                 "nombre": ubicacion.nombre,
                 "nomenclatura": ubicacion.nomenclatura,
                 "tipo": ubicacion.tipo,

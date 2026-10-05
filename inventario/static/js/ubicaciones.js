@@ -7,6 +7,7 @@
   const treeWrapper = document.querySelector("#treeWrapper");
   const treeEmptyState = document.querySelector("#treeEmptyState");
   const treeElement = document.querySelector("#arbolUbicaciones");
+  const bodegaMapaSelect = document.querySelector("#bodegaMapa");
   const buscarInput = document.querySelector("#buscarUbicacion");
   const limpiarBusquedaBtn = document.querySelector(
     "#limpiarBusquedaUbicacion",
@@ -40,6 +41,7 @@
     bodegasMap: new Map(),
     mapa: new Map(),
     seleccionado: null,
+    bodegaSeleccionada: null,
     filtro: "",
     expandedBodegas: new Set(),
     expandedEstantes: new Set(),
@@ -102,7 +104,7 @@
     );
     const baseIds = new Set(bases.map((nodo) => nodo.id));
     const bodegaIds = new Set(
-      bases.map((nodo) => nodo.bodega).filter((id) => id !== undefined),
+      state.arbol.map((nodo) => nodo.bodega).filter((id) => id !== undefined),
     );
 
     if (!state.initialized) {
@@ -250,8 +252,9 @@
     }
 
     padreInput.value = nodo.id;
+    bodegaSelect.value = String(nodo.bodega);
     const codigo = nodo.nomenclatura || nodo.ruta || "";
-    padreNombreInput.value = `${nodo.nombre} · ${codigo}`.trim();
+    padreNombreInput.value = `${nodo.nombre} · ${nodo.codigo_contenedor || codigo}`.trim();
   }
 
   function actualizarDetalle(nodo) {
@@ -290,21 +293,26 @@
     detallePanel.innerHTML = `
       <div class="detail-section">
         <div class="detail-row">
+          <span>Clase</span>
+          <span>${nodo.es_movil ? "Contenedor móvil" : "Ubicación fija"}</span>
+        </div>
+        ${nodo.es_movil ? `<div class="detail-row"><span>Código permanente</span><span><strong>${escaparHtml(nodo.codigo_contenedor)}</strong></span></div>` : ""}
+        <div class="detail-row">
           <span>Nombre</span>
           <span><strong>${nombreEscapado}</strong></span>
         </div>
-        <div class="detail-row">
+        ${!nodo.es_movil ? `<div class="detail-row">
           <span>Número</span>
           <span>${numero}</span>
-        </div>
+        </div>` : ""}
         <div class="detail-row">
           <span>Tipo</span>
           <span>${tipoEscapado}</span>
         </div>
-        <div class="detail-row">
+        ${!nodo.es_movil ? `<div class="detail-row">
           <span>Nivel</span>
           <span>${nivel}</span>
-        </div>
+        </div>` : ""}
         <div class="detail-row">
           <span>Bodega</span>
           <span>${bodegaEscapada}</span>
@@ -345,7 +353,7 @@
       <div class="physical-wrapper">
         <div class="physical-header">
           <span class="physical-title">Vista fisica</span>
-          <span>Nivel 1 (Estante/Estiba) &gt; Panel &gt; Division &gt; Contenedor</span>
+          <span>Ubicaciones fijas y contenedores móviles</span>
         </div>
         <div class="physical-canvas" id="vistaFisica"></div>
       </div>
@@ -364,6 +372,115 @@
     }
 
     renderVistaFisica(nodo);
+    if (nodo.es_movil) renderMovimiento(nodo);
+  }
+
+  function endpointContenedor(plantilla, id, accion) {
+    return plantilla ? plantilla.replace("/0/", `/${id}/`) : `/inventario/ubicaciones/${id}/${accion}/`;
+  }
+
+  function renderMovimiento(nodo) {
+    const bloque = document.createElement("section");
+    bloque.className = "movement-section";
+    bloque.innerHTML = `
+      <h3>Mover contenedor</h3>
+      <p>Se trasladarán sus artículos y todos los contenedores internos. Sus códigos y cantidades se conservan.</p>
+      <form id="formMovimiento" class="form-wrapper">
+        <div class="form-group"><label for="bodegaMovimiento">Bodega de destino</label><select id="bodegaMovimiento" required></select></div>
+        <div class="form-group"><label for="destinoMovimiento">Ubicación o contenedor de destino</label><select id="destinoMovimiento"></select></div>
+        <button type="submit" class="btn-primary" id="moverContenedor">Mover con todo su contenido</button>
+        <p id="errorMovimiento" role="alert" style="color:var(--danger)"></p>
+      </form>
+      <h3>Historial de movimientos</h3>
+      <div id="historialMovimientos" aria-live="polite">Cargando historial...</div>
+    `;
+    detallePanel.appendChild(bloque);
+    const bodegaDestino = bloque.querySelector("#bodegaMovimiento");
+    const destinoSelect = bloque.querySelector("#destinoMovimiento");
+    const boton = bloque.querySelector("#moverContenedor");
+    const errorElement = bloque.querySelector("#errorMovimiento");
+    const excluidos = new Set();
+    const recorrer = (item) => {
+      excluidos.add(item.id);
+      (item.hijos || []).forEach(recorrer);
+    };
+    recorrer(nodo);
+    state.bodegas.forEach((bodega) => {
+      bodegaDestino.add(new Option(bodega.nombre, String(bodega.id)));
+    });
+    bodegaDestino.value = String(nodo.bodega);
+    const actualizarBoton = () => {
+      boton.disabled = Number(bodegaDestino.value) === nodo.bodega && normalizarId(destinoSelect.value || null) === nodo.padre;
+    };
+    const poblarDestinos = () => {
+      destinoSelect.replaceChildren(new Option("Sin ubicación asignada en esta bodega", ""));
+      [...state.mapa.values()]
+        .filter((item) => item.bodega === Number(bodegaDestino.value) && !excluidos.has(item.id))
+        .sort((a, b) => (a.ruta || a.nombre).localeCompare(b.ruta || b.nombre))
+        .forEach((item) => {
+          const codigo = item.codigo_contenedor || item.nomenclatura;
+          destinoSelect.add(new Option(`${codigo || ""} · ${item.ruta || item.nombre}`, String(item.id)));
+        });
+      if (Number(bodegaDestino.value) === nodo.bodega) destinoSelect.value = nodo.padre == null ? "" : String(nodo.padre);
+      actualizarBoton();
+    };
+    poblarDestinos();
+    bodegaDestino.addEventListener("change", poblarDestinos);
+    destinoSelect.addEventListener("change", actualizarBoton);
+    bloque.querySelector("#formMovimiento").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      boton.disabled = true;
+      boton.textContent = "Moviendo...";
+      errorElement.textContent = "";
+      try {
+        const response = await fetch(endpointContenedor(endpoints.mover, nodo.id, "mover"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+          credentials: "same-origin",
+          body: JSON.stringify({ destino: normalizarId(destinoSelect.value || null), bodega: Number(bodegaDestino.value) }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || Object.values(data).flat().join(" "));
+        await cargarDatos();
+        seleccionarNodo(nodo.id, true);
+        if (typeof swalToast === "function") swalToast("success", "Contenedor y contenido trasladados");
+      } catch (error) {
+        errorElement.textContent = error.message || "No fue posible mover el contenedor.";
+        boton.textContent = "Mover con todo su contenido";
+        actualizarBoton();
+      }
+    });
+    const historial = bloque.querySelector("#historialMovimientos");
+    fetch(endpointContenedor(endpoints.movimientos, nodo.id, "movimientos"), { credentials: "same-origin" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("No fue posible cargar el historial.");
+        return response.json();
+      })
+      .then((movimientos) => {
+        if (!movimientos.length) {
+          historial.textContent = "Todavía no hay movimientos registrados.";
+          return;
+        }
+        historial.replaceChildren();
+        movimientos.forEach((movimiento) => {
+          const entrada = document.createElement("div");
+          entrada.className = "movement-entry";
+          const fecha = document.createElement("strong");
+          fecha.textContent = new Date(movimiento.fecha).toLocaleString("es-CO");
+          const origen = document.createElement("p");
+          origen.textContent = `Desde: ${movimiento.bodega_origen_nombre} / ${movimiento.ruta_origen}`;
+          const destino = document.createElement("p");
+          destino.textContent = `Hasta: ${movimiento.bodega_destino_nombre} / ${movimiento.ruta_destino}`;
+          entrada.append(fecha, origen, destino);
+          if (movimiento.contenedor_principal !== nodo.id) {
+            const incluido = document.createElement("small");
+            incluido.textContent = `Incluido en el traslado de ${movimiento.codigo_contenedor_principal}`;
+            entrada.appendChild(incluido);
+          }
+          historial.appendChild(entrada);
+        });
+      })
+      .catch((error) => { historial.textContent = error.message; });
   }
 
 
@@ -430,16 +547,17 @@
         const contId = normalizarId(contenedor.id);
         const esSeleccionado = contId === seleccionadoId;
         const enRuta = rutaIds.has(contId);
-        const codigo =
+        const codigo = contenedor.codigo_contenedor || (
           contenedor.nomenclatura && contenedor.nomenclatura !== ""
             ? contenedor.nomenclatura
             : contenedor.numero != null
               ? contenedor.numero
-              : "";
+              : "");
         return `
           <div class="physical-container" data-selected="${esSeleccionado}" data-path="${enRuta}">
             <span>${escaparHtml(contenedor.nombre || "Contenedor")}</span>
             <span>${escaparHtml(codigo)}</span>
+            ${(contenedor.hijos || []).length ? construirContenedoresHtml(contenedor.hijos, rutaIds, seleccionadoId) : ""}
           </div>
         `;
       })
@@ -462,6 +580,10 @@
 
     const base = obtenerEstanteBase(nodo);
     if (!base) {
+      if (nodo.es_movil) {
+        contenedor.innerHTML = construirContenedoresHtml([nodo], obtenerRutaIds(nodo), nodo.id);
+        return;
+      }
       contenedor.innerHTML = `
         <div class="physical-empty">
           Esta ubicacion no esta asociada a una ubicacion base (estante o estiba).
@@ -640,7 +762,7 @@
     const nodeDiv = document.createElement("div");
     nodeDiv.className = "tree-node";
     nodeDiv.dataset.nodeId = nodo.id;
-    const codigoLabel = nodo.nomenclatura || nodo.ruta || "";
+    const codigoLabel = nodo.codigo_contenedor || nodo.nomenclatura || nodo.ruta || "";
     const numeroLabel =
       nodo.numero !== undefined && nodo.numero !== null && nodo.numero !== ""
         ? nodo.numero
@@ -679,7 +801,7 @@
 
     const badge = document.createElement("span");
     badge.className = "badge";
-    badge.textContent =
+    badge.textContent = nodo.es_movil ? "M" :
       nodo.nivel !== undefined && nodo.nivel !== null ? nodo.nivel : "-";
     nodeDiv.appendChild(badge);
 
@@ -687,12 +809,12 @@
     infoContainer.className = "tree-node-info";
 
     const nombreStrong = document.createElement("strong");
-    nombreStrong.textContent = `${numeroLabel} - ${nodo.nombre}`;
+    nombreStrong.textContent = nodo.es_movil ? nodo.nombre : `${numeroLabel} - ${nodo.nombre}`;
     infoContainer.appendChild(nombreStrong);
 
     const meta = document.createElement("div");
     meta.className = "tree-node-meta";
-    meta.textContent = `${nodo.tipo_display} - ${codigoLabel}`;
+    meta.textContent = `${nodo.es_movil ? "Contenedor móvil" : nodo.tipo_display + " · Fija"} - ${codigoLabel}`;
     infoContainer.appendChild(meta);
 
     nodeDiv.appendChild(infoContainer);
@@ -816,12 +938,19 @@
 
     const filtroTerm = state.filtro.trim();
     const hayFiltro = filtroTerm.length > 0;
-    const fuente = hayFiltro ? filtrarArbol(state.arbol, filtroTerm) : state.arbol;
+    const raicesBodega = state.arbol.filter((nodo) => nodo.bodega === state.bodegaSeleccionada);
+    const fuente = hayFiltro ? filtrarArbol(raicesBodega, filtroTerm) : raicesBodega;
     const grupos = agruparRaicesPorBodega(fuente);
 
     treeElement.innerHTML = "";
+    buscarInput.disabled = state.bodegaSeleccionada == null;
+    limpiarBusquedaBtn.disabled = state.bodegaSeleccionada == null;
     if (!grupos.length) {
       treeEmptyState.style.display = "block";
+      treeEmptyState.textContent = state.bodegaSeleccionada == null
+        ? "Selecciona una bodega para ver sus ubicaciones."
+        : hayFiltro ? "No hay coincidencias en esta bodega."
+        : "Esta bodega no tiene ubicaciones registradas. Crea la primera desde el formulario.";
       actualizarBotonesColapso(0);
       return;
     }
@@ -877,6 +1006,13 @@
 
   function seleccionarNodo(id, ensureVisible = false) {
     const nodo = state.mapa.get(normalizarId(id));
+    if (ensureVisible) {
+      state.filtro = "";
+      buscarInput.value = "";
+    }
+    if (nodo && nodo.bodega !== state.bodegaSeleccionada) {
+      cambiarBodegaMapa(nodo.bodega);
+    }
     state.seleccionado = nodo || null;
 
     if (ensureVisible && nodo) {
@@ -901,6 +1037,7 @@
         nodo.nombre.toLowerCase().includes(term) ||
         (nodo.tipo_display || "").toLowerCase().includes(term) ||
         (nodo.ruta || "").toLowerCase().includes(term) ||
+        (nodo.codigo_contenedor || "").toLowerCase().includes(term) ||
         (nodo.nomenclatura || "").toLowerCase().includes(term);
 
       if (coincide || hijosFiltrados.length) {
@@ -941,7 +1078,7 @@
     state.tipos.forEach((tipo) => {
       const option = document.createElement("option");
       option.value = tipo.value;
-      option.textContent = `${tipo.label} · Nivel ${tipo.nivel}`;
+      option.textContent = tipo.value === "CONTENEDOR" ? "Contenedor móvil (caja, canasta...)" : `${tipo.label} · Ubicación fija`;
       tipoSelect.appendChild(option);
     });
   }
@@ -957,6 +1094,33 @@
       option.textContent = bodega.nombre;
       bodegaSelect.appendChild(option);
     });
+    bodegaMapaSelect.replaceChildren(new Option("Selecciona una bodega", ""));
+    state.bodegas.forEach((bodega) => {
+      bodegaMapaSelect.add(new Option(bodega.nombre, String(bodega.id)));
+    });
+    if (!state.bodegasMap.has(state.bodegaSeleccionada)) state.bodegaSeleccionada = null;
+    bodegaMapaSelect.value = state.bodegaSeleccionada == null ? "" : String(state.bodegaSeleccionada);
+    bodegaMapaSelect.disabled = false;
+    bodegaSelect.value = bodegaMapaSelect.value;
+  }
+
+  function cambiarBodegaMapa(id) {
+    state.bodegaSeleccionada = normalizarId(id || null);
+    bodegaMapaSelect.value = state.bodegaSeleccionada == null ? "" : String(state.bodegaSeleccionada);
+    bodegaSelect.value = bodegaMapaSelect.value;
+    state.filtro = "";
+    buscarInput.value = "";
+    state.seleccionado = null;
+    state.previousExpansion = null;
+    limpiarPadre();
+    if (state.bodegaSeleccionada != null) {
+      state.expandedBodegas.add(state.bodegaSeleccionada);
+      state.arbol.filter((nodo) => nodo.bodega === state.bodegaSeleccionada && esTipoNivelBase(nodo.tipo))
+        .forEach((nodo) => state.expandedEstantes.add(nodo.id));
+    }
+    treeWrapper.scrollTop = 0;
+    renderTree();
+    actualizarDetalle(null);
   }
 
   function setFormBusy(isBusy) {
@@ -1077,6 +1241,7 @@
       }
 
       form.reset();
+      bodegaSelect.value = state.bodegaSeleccionada == null ? "" : String(state.bodegaSeleccionada);
       limpiarPadre();
       construirHintTipo(null);
     } catch (error) {
@@ -1091,12 +1256,15 @@
 
   function limpiarFormulario() {
     form.reset();
+    bodegaSelect.value = state.bodegaSeleccionada == null ? "" : String(state.bodegaSeleccionada);
     limpiarPadre();
     construirHintTipo(null);
   }
 
   function initEventos() {
     form.addEventListener("submit", guardarUbicacion);
+    bodegaMapaSelect.addEventListener("change", () => cambiarBodegaMapa(bodegaMapaSelect.value));
+    bodegaSelect.addEventListener("change", () => cambiarBodegaMapa(bodegaSelect.value));
     if (limpiarBtn) {
       limpiarBtn.addEventListener("click", limpiarFormulario);
     }

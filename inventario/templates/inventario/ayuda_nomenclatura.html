@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Guía de nomenclatura · Inventario{% endblock %}
+{% block container %}
+<style>
+  .nomenclature-guide { width: 100%; max-width: 960px; min-width: 0; box-sizing: border-box; margin: 0 auto; padding: 2rem 3vw; color: #0f172a; line-height: 1.65; overflow-wrap: anywhere; }
+  .nomenclature-guide h1 { line-height: 1.2; }
+  .guide-card { margin: 1.25rem 0; padding: 1.25rem; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; }
+  .guide-card h2 { margin-top: 0; }
+  .guide-example { padding: 1rem; background: #eff6ff; border-radius: 8px; overflow-wrap: anywhere; }
+  .guide-table-wrap { overflow-x: auto; }
+  .guide-table { width: 100%; border-collapse: collapse; }
+  .guide-table th, .guide-table td { text-align: left; padding: .75rem; border-bottom: 1px solid #e2e8f0; }
+  .guide-table caption { text-align: left; margin-bottom: .75rem; }
+</style>
+<article class="nomenclature-guide">
+  <h1>Guía de nomenclatura</h1>
+  <p>¿Dónde está el artículo que buscas? La nomenclatura te indica el camino hasta su ubicación o caja. Aquí aprenderás a leerla y a reconocer qué cambia cuando mueves un contenedor.</p>
+  <section class="guide-card">
+    <h2>1. Empieza por la bodega</h2>
+    <p>La bodega se muestra por separado. Confirma que estás mirando la correcta: dos bodegas pueden tener una ubicación llamada <code>100_1_2</code>.</p>
+    <p>En Almacenar y Picking eliges la bodega de trabajo. En Traslados eliges la bodega de destino; el origen puede estar en otra bodega.</p>
+  </section>
+  <section class="guide-card">
+    <h2>2. Lee el camino de izquierda a derecha</h2>
+    <p>Cada guion bajo <code>_</code> separa un nivel. Los números corresponden a ubicaciones fijas y la letra <strong>C</strong> identifica un contenedor.</p>
+    <div class="guide-example"><strong><code>100_1_2_C4</code></strong><br>Estante 100 → Panel 1 → División 2 → Contenedor C4</div>
+    <p>Si encuentras esta nomenclatura junto a un artículo, sus existencias están registradas directamente en la caja C4. Si la ubicación no tiene panel o división, el camino tendrá menos segmentos.</p>
+    <p>Una ubicación fija puede ser un estante, una estiba, un panel o una división. Un contenedor puede ser una caja u otro recipiente que puedes mover.</p>
+  </section>
+  <section class="guide-card">
+    <h2>3. Cada caja conserva su código</h2>
+    <p><strong>C4 significa «contenedor con ID 4».</strong> La aplicación asigna el código al crear la caja. No tienes que escribirlo ni cambiarlo: esa caja seguirá siendo C4 aunque la lleves a otra ubicación o bodega.</p>
+    <p>Los códigos pueden tener saltos; no hace falta que estén en orden consecutivo. Puedes darle un nombre fácil de reconocer, como «Tornillos pequeños», para acompañar su identificación.</p>
+  </section>
+  <section class="guide-card">
+    <h2>4. Una caja puede estar dentro de otra</h2>
+    <p>Si colocas C9 dentro de C4, ambas aparecen en el camino. El último código identifica la caja donde está registrado el artículo.</p>
+    <div class="guide-example"><strong><code>100_1_2_C4_C9</code></strong><br>Estante 100 → Panel 1 → División 2 → Caja C4 → Caja C9</div>
+    <p>Para encontrar ese artículo, llega a la división 2, busca C4 y abre la caja C9 que está dentro. Si mueves C4 completa, C9 y el contenido de ambas se mueven con ella.</p>
+    <p>Una caja que está directamente en la bodega, sin ubicación padre, se muestra con su código, por ejemplo <code>C4</code>. Si contiene C9, el camino es <code>C4_C9</code>.</p>
+  </section>
+  <section class="guide-card">
+    <h2>5. ¿Qué pasa cuando mueves una caja?</h2>
+    <p>Su código permanece igual y su nomenclatura se actualiza para señalar la nueva posición. Supongamos que llevas C4, con C9 dentro, a la ubicación <code>101_2_1</code>:</p>
+    <div class="guide-table-wrap"><table class="guide-table">
+      <caption>Ejemplo de traslado de una caja completa</caption>
+      <thead><tr><th scope="col">Caja</th><th scope="col">Antes</th><th scope="col">Después</th></tr></thead>
+      <tbody><tr><th scope="row">C4</th><td><code>100_1_2_C4</code></td><td><code>101_2_1_C4</code></td></tr>
+      <tr><th scope="row">C9, dentro de C4</th><td><code>100_1_2_C4_C9</code></td><td><code>101_2_1_C4_C9</code></td></tr></tbody>
+    </table></div>
+    <p>El camino cambia porque las cajas están en otro sitio. Sus códigos y las cantidades almacenadas se conservan. También puede cambiar la parte numérica si se reorganizan las ubicaciones fijas.</p>
+  </section>
+  <section class="guide-card">
+    <h2>6. Elige la operación que necesitas</h2>
+    <ul>
+      <li><strong>Para ingresar unidades:</strong> usa <a href="{% url 'almacenar' %}">Almacenar</a>.</li>
+      <li><strong>Para retirar unidades:</strong> usa <a href="{% url 'picking' %}">Picking</a>.</li>
+      <li><strong>Para mover unidades de un artículo:</strong> usa <a href="{% url 'traslados' %}">Traslados</a>. Puedes moverlas entre ubicaciones y contenedores.</li>
+      <li><strong>Para mover una caja completa con todo su contenido:</strong> entra a <a href="{% url 'ubicaciones' %}">Gestión de ubicaciones</a>, selecciona el contenedor y utiliza su opción de traslado.</li>
+    </ul>
+    <p>En las tablas de existencias, <strong>Ubicación / caja</strong> muestra la nomenclatura completa y <strong>Ruta</strong> muestra el camino con nombres. Haz clic en la fila para seleccionar esa posición.</p>
+    <p><strong>Recuerda:</strong> el código te dice qué caja es; la nomenclatura y la bodega te dicen dónde encontrarla.</p>
+  </section>
+</article>
+{% endblock %}

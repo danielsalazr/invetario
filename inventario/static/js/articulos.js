@@ -3,15 +3,12 @@
   const endpoints = config.endpoints || {};
   const articulosEndpoint =
     endpoints.articulos || "/inventario/articulos/";
-  const ubicacionesEndpoint =
-    endpoints.ubicaciones || "/inventario/ubicaciones/api/";
   const bodegasEndpoint = endpoints.bodegas || "/inventario/bodegas/api/";
   const marcasEndpoint = endpoints.marcas || "/inventario/marcas/api/";
   const unidadesMedidaEndpoint =
     endpoints.unidades_medida || "/inventario/unidades-medida/api/";
   const $ = window.jQuery || null;
   const hasSelect2 = Boolean($ && $.fn && $.fn.select2);
-  const UBICACION_STORAGE_KEY = "inventario::seleccionUbicacion";
 
   const form = document.querySelector("#formArticulo");
   const panelFormulario = document.querySelector("#panelFormulario");
@@ -45,12 +42,13 @@
   const nextImagenBtn = document.querySelector("#nextImagen");
   const detalleInventarioLista = document.querySelector("#detalleInventarioLista");
   const detalleInventarioVacio = document.querySelector("#detalleInventarioVacio");
-  const inventarioForm = document.querySelector("#formInventario");
-  const inventarioCantidadInput = document.querySelector("#inventarioCantidad");
-  const inventarioSubmitBtn = document.querySelector("#agregarInventarioBtn");
   const bodegaSelect = document.querySelector("#selectorBodega");
   const ubicacionSelect = document.querySelector("#selectorUbicacion");
   const lockButton = document.querySelector("#bloquearUbicacionBtn");
+  const inventarioForm = document.querySelector("#formInventario");
+  const inventarioCantidadInput = document.querySelector("#inventarioCantidad");
+  const inventarioSubmitBtn = document.querySelector("#agregarInventarioBtn");
+  const ubicacionStorageKey = "inventario::ubicacionTrabajo";
   const seleccionResumen = document.querySelector("#inventarioSeleccionResumen");
   const marcaSelect = document.querySelector("#marca");
   const unidadSelect = document.querySelector("#unidad_de_medida");
@@ -170,18 +168,17 @@
     bodegas: [],
     marcas: [],
     unidades: [],
-    ubicacionesCache: new Map(),
-    seleccionUbicacion: {
-      bodegaId: null,
-      ubicacionId: null,
-      locked: false,
-    },
+    bodegaId: null,
+    ubicacionId: null,
+    ubicaciones: [],
+    contextoCargado: false,
+    locked: false,
+    ingresoBusy: false,
   };
 
   const photoState = [];
   let cameraStream = null;
   let lightboxIndex = 0;
-  let restoringSeleccion = false;
 
   const csrfToken =
     form.querySelector("[name=csrfmiddlewaretoken]")?.value ||
@@ -402,13 +399,8 @@
     if (!resumenWrapper) return;
     const metrics = {
       articulos: resumen?.articulos ?? articulos.length ?? 0,
-      existencias:
-        resumen?.existencias ??
-        articulos.reduce(
-          (total, item) => total + Number(item.existencias || 0),
-          0,
-        ),
-      ubicaciones: resumen?.ubicaciones ?? 0,
+      existencias: articulos.reduce((total, item) => total + existenciasBodega(item), 0),
+      ubicaciones: new Set(articulos.flatMap((item) => inventarioBodega(item).map((registro) => registro.ubicacion?.id))).size,
       fotos: resumen?.fotos ?? 0,
     };
 
@@ -435,6 +427,7 @@
       return "";
     }
     const partes = [];
+    if (item.codigo_contenedor) partes.push(item.codigo_contenedor);
     if (item.nomenclatura) {
       partes.push(item.nomenclatura);
     }
@@ -455,14 +448,6 @@
       (item) => Number(item.id) === Number(id),
     );
     return encontrado?.nombre || "";
-  }
-
-  function getUbicacionFromCache(bodegaId, ubicacionId) {
-    const lista = state.ubicacionesCache.get(bodegaId);
-    if (!lista) return null;
-    return (
-      lista.find((item) => Number(item.id) === Number(ubicacionId)) || null
-    );
   }
 
   function isSelect2Active(element) {
@@ -539,8 +524,8 @@
     const valorSeleccionado =
       selectedValue !== null && selectedValue !== undefined
         ? String(selectedValue)
-        : state.seleccionUbicacion.bodegaId
-        ? String(state.seleccionUbicacion.bodegaId)
+        : state.bodegaId
+        ? String(state.bodegaId)
         : "";
 
     const placeholderLabel = bodegaSelect.dataset.placeholder || "";
@@ -553,28 +538,6 @@
     ];
 
     setOptionsForSelect(bodegaSelect, opciones, valorSeleccionado);
-  }
-
-  function populateUbicacionOptions(lista, selectedValue = null) {
-    if (!ubicacionSelect) return;
-
-    const valorSeleccionado =
-      selectedValue !== null && selectedValue !== undefined
-        ? String(selectedValue)
-        : state.seleccionUbicacion.ubicacionId
-        ? String(state.seleccionUbicacion.ubicacionId)
-        : "";
-
-    const placeholderLabel = ubicacionSelect.dataset.placeholder || "";
-    const opciones = [
-      { value: "", label: placeholderLabel },
-      ...lista.map((item) => ({
-        value: String(item.id),
-        label: buildUbicacionLabel(item),
-      })),
-    ];
-
-    setOptionsForSelect(ubicacionSelect, opciones, valorSeleccionado);
   }
 
   function populateMarcaOptions(selectedValue = null) {
@@ -624,96 +587,31 @@
     populateMarcaOptions(marcaSelect ? marcaSelect.value : "");
     populateUnidadMedidaOptions(unidadSelect ? unidadSelect.value : "");
   }
-  function flattenUbicaciones(raices) {
-    const resultado = [];
-    const pila = Array.isArray(raices) ? [...raices] : [];
-    while (pila.length) {
-      const nodo = pila.shift();
-      if (!nodo || typeof nodo !== "object") {
-        continue;
-      }
-      resultado.push({
-        id: parsePositiveInt(nodo.id) ?? nodo.id,
-        nombre: nodo.nombre,
-        ruta: nodo.ruta,
-        nomenclatura: nodo.nomenclatura,
-        tipo: nodo.tipo,
-        tipo_display: nodo.tipo_display || nodo.tipo,
-        bodega: parsePositiveInt(nodo.bodega) ?? nodo.bodega,
-      });
-      if (Array.isArray(nodo.hijos) && nodo.hijos.length) {
-        pila.push(...nodo.hijos);
-      }
-    }
-    return resultado;
-  }
-
   function updateSeleccionResumen() {
     if (!seleccionResumen) return;
-
-    const { bodegaId, ubicacionId, locked } = state.seleccionUbicacion;
-    if (!bodegaId || !ubicacionId) {
-      seleccionResumen.textContent =
-        "Selecciona una bodega y una ubicacion para registrar movimientos.";
-      return;
-    }
-    const bodegaNombre = getBodegaName(bodegaId) || `Bodega ${bodegaId}`;
-    const ubicacion = getUbicacionFromCache(bodegaId, ubicacionId);
-    const ubicacionTexto = buildUbicacionLabel(ubicacion);
-    seleccionResumen.textContent = `${locked ? "Seleccion actual" : "Seleccion preparada"}: ${bodegaNombre} - ${ubicacionTexto}`;
+    const id = state.bodegaId;
+    const ubicacion = state.ubicaciones.find((item) => item.id === state.ubicacionId);
+    seleccionResumen.textContent = id
+      ? `Existencias en ${getBodegaName(id)}${ubicacion ? ` · ${labelUbicacion(ubicacion)}` : ""}. ${state.locked ? "Seleccion confirmada." : "Confirma bodega y ubicacion para registrar entradas."}`
+      : "Existencias de todas las bodegas. Elige una bodega para acotar la consulta.";
   }
 
-  function persistSeleccion() {
-    if (!window.localStorage) return;
-    const { bodegaId, ubicacionId, locked } = state.seleccionUbicacion;
-    if (locked && bodegaId && ubicacionId) {
-      const payload = {
-        bodegaId,
-        ubicacionId,
-      };
-      try {
-        window.localStorage.setItem(
-          UBICACION_STORAGE_KEY,
-          JSON.stringify(payload),
-        );
-      } catch (error) {
-        console.error(error);
-      }
-    } else {
-      window.localStorage.removeItem(UBICACION_STORAGE_KEY);
-    }
+  function inventarioBodega(articulo) {
+    const id = state.bodegaId;
+    return (articulo?.inventario || []).filter((item) => (!id || Number(item.ubicacion?.bodega_id) === Number(id))
+      && (!state.ubicacionId || Number(item.ubicacion?.id) === state.ubicacionId));
   }
 
-  function updateLockButtonUI() {
-    if (!lockButton) return;
+  function existenciasBodega(articulo) {
+    return inventarioBodega(articulo).reduce((total, item) => total + Number(item.cantidad || 0), 0);
+  }
 
-    if (state.seleccionUbicacion.locked) {
-      lockButton.textContent = "Liberar";
-      lockButton.classList.add("danger-button");
-      lockButton.classList.remove("secondary-button");
-      lockButton.disabled = false;
-      setSelectDisabled(bodegaSelect, true);
-      setSelectDisabled(ubicacionSelect, true);
-    } else {
-      lockButton.textContent = "Seleccionar ubicacion";
-      lockButton.classList.remove("danger-button");
-      if (!lockButton.classList.contains("secondary-button")) {
-        lockButton.classList.add("secondary-button");
-      }
-      const puedeBloquear =
-        Boolean(state.seleccionUbicacion.bodegaId) &&
-        Boolean(state.seleccionUbicacion.ubicacionId);
-      lockButton.disabled = !puedeBloquear;
-      setSelectDisabled(bodegaSelect, false);
-      const tieneUbicaciones =
-        Boolean(state.seleccionUbicacion.bodegaId) &&
-        (state.ubicacionesCache.get(state.seleccionUbicacion.bodegaId)?.length ||
-          0) > 0;
-      setSelectDisabled(ubicacionSelect, !tieneUbicaciones);
-    }
-
-    applyInventarioFormState();
+  function refrescarBodega() {
+    actualizarContextoUI();
     updateSeleccionResumen();
+    filtrarArticulos(searchInput?.value || "");
+    updateResumen(state.resumen, state.articulos);
+    renderDetalle(state.seleccionado);
   }
 
   async function loadBodegas() {
@@ -736,13 +634,13 @@
           a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" }),
         );
       populateBodegaOptions();
+      return true;
     } catch (error) {
       console.error(error);
       if (typeof swalErr === "function") {
         swalErr("No fue posible cargar el listado de bodegas.");
       }
-    } finally {
-      updateLockButtonUI();
+      return false;
     }
   }
 
@@ -792,235 +690,92 @@
       }
     }
   }
-  async function loadUbicacionesForBodega(bodegaId, options = {}) {
-    const { preselect } = options;
-    if (!ubicacionSelect || !bodegaId) {
-      populateUbicacionOptions([]);
-      return [];
-    }
+  function handleBodegaChange(eventOrValue) {
+    if (state.locked || state.ingresoBusy) return;
+    const valor = eventOrValue?.target ? eventOrValue.target.value : eventOrValue;
+    state.bodegaId = parsePositiveInt(valor);
+    state.ubicacionId = null;
+    window.bodegaSeleccion.set(valor);
+    guardarUbicacion();
+    poblarUbicaciones();
+    refrescarBodega();
+  }
 
-    if (state.ubicacionesCache.has(bodegaId)) {
-      const listaCache = state.ubicacionesCache.get(bodegaId) || [];
-      populateUbicacionOptions(listaCache, preselect);
-      if (preselect) {
-        state.seleccionUbicacion.ubicacionId = parsePositiveInt(preselect);
-      }
-      updateLockButtonUI();
-      return listaCache;
-    }
+  function labelUbicacion(item) {
+    return `${item.codigo_contenedor || item.nomenclatura || item.id} · ${item.ruta || item.nombre}`;
+  }
 
+  function poblarUbicaciones() {
+    const opciones = [{ value: "", label: "Selecciona una ubicacion" },
+      ...state.ubicaciones.filter((item) => Number(item.bodega) === state.bodegaId)
+        .map((item) => ({ value: item.id, label: labelUbicacion(item) }))];
+    setOptionsForSelect(ubicacionSelect, opciones, state.ubicacionId);
+  }
+
+  function guardarUbicacion() {
     try {
-      setSelectDisabled(ubicacionSelect, true);
-      populateUbicacionOptions([]);
-      const response = await fetch(
-        `${ubicacionesEndpoint}?bodega=${encodeURIComponent(bodegaId)}`,
-        {
-          headers: { Accept: "application/json" },
-          credentials: "same-origin",
-        },
-      );
-      if (!response.ok) {
-        throw new Error("No fue posible cargar las ubicaciones.");
-      }
-      const data = await response.json();
-      console.log(data);
-      const listaFuente = Array.isArray(data)
-
-        ? data
-        : Array.isArray(data?.ubicaciones)
-        ? data.ubicaciones
-        : [];
-      const lista = flattenUbicaciones(listaFuente).sort((a, b) =>
-        buildUbicacionLabel(a).localeCompare(buildUbicacionLabel(b), "es", {
-          sensitivity: "base",
-        }),
-      );
-      state.ubicacionesCache.set(bodegaId, lista);
-      populateUbicacionOptions(lista, preselect);
-      if (preselect) {
-        state.seleccionUbicacion.ubicacionId = parsePositiveInt(preselect);
-      }
-      return lista;
-    } catch (error) {
-      console.error(error);
-      if (typeof swalErr === "function") {
-        swalErr("No fue posible cargar las ubicaciones de la bodega seleccionada.");
-      }
-      populateUbicacionOptions([]);
-      return [];
-    } finally {
-      updateLockButtonUI();
-    }
+      localStorage.setItem(ubicacionStorageKey, JSON.stringify({ bodegaId: state.bodegaId, ubicacionId: state.ubicacionId, locked: state.locked }));
+    } catch (_) { /* La seleccion sigue operativa sin almacenamiento. */ }
   }
 
-  async function restoreSeleccionDesdeStorage() {
-    if (!window.localStorage) {
-      updateLockButtonUI();
-      return;
-    }
-    let almacenada = null;
-    try {
-      almacenada = JSON.parse(
-        window.localStorage.getItem(UBICACION_STORAGE_KEY) || "null",
-      );
-    } catch (error) {
-      almacenada = null;
-    }
-    if (
-      !almacenada?.bodegaId ||
-      !almacenada?.ubicacionId ||
-      !state.bodegas.some(
-        (item) => Number(item.id) === Number(almacenada.bodegaId),
-      )
-    ) {
-      updateLockButtonUI();
-      return;
-    }
-    restoringSeleccion = true;
-    state.seleccionUbicacion.bodegaId = parsePositiveInt(almacenada.bodegaId);
-    populateBodegaOptions(state.seleccionUbicacion.bodegaId);
-    await loadUbicacionesForBodega(state.seleccionUbicacion.bodegaId, {
-      preselect: parsePositiveInt(almacenada.ubicacionId),
-    });
-    state.seleccionUbicacion.ubicacionId = parsePositiveInt(
-      almacenada.ubicacionId,
-    );
-    restoringSeleccion = false;
-    toggleSelectionLock(true);
+  function actualizarContextoUI() {
+    setSelectDisabled(bodegaSelect, !state.contextoCargado || state.locked || state.ingresoBusy);
+    setSelectDisabled(ubicacionSelect, !state.contextoCargado || !state.bodegaId || state.locked || state.ingresoBusy);
+    lockButton.textContent = state.locked ? "Liberar" : "Seleccionar ubicacion";
+    lockButton.disabled = !state.contextoCargado || state.ingresoBusy || (!state.locked && !(state.bodegaId && state.ubicacionId));
+    lockButton.classList.toggle("danger-button", state.locked);
+    inventarioCantidadInput.disabled = !state.locked || !state.seleccionado || state.ingresoBusy;
+    inventarioSubmitBtn.disabled = inventarioCantidadInput.disabled;
   }
 
-  async function handleBodegaChange(eventOrValue) {
-    const rawValue =
-      eventOrValue && typeof eventOrValue === "object" && "target" in eventOrValue
-        ? eventOrValue.target.value
-        : eventOrValue;
-    const valor = parsePositiveInt(rawValue);
-    state.seleccionUbicacion.bodegaId = valor;
-    if (restoringSeleccion) {
-      return;
-    }
-    state.seleccionUbicacion.ubicacionId = null;
-    if (!valor) {
-      populateUbicacionOptions([]);
-      updateLockButtonUI();
-      return;
-    }
-    await loadUbicacionesForBodega(valor);
-  }
-
-  function handleUbicacionChange(eventOrValue) {
-    const rawValue =
-      eventOrValue && typeof eventOrValue === "object" && "target" in eventOrValue
-        ? eventOrValue.target.value
-        : eventOrValue;
-    const valor = parsePositiveInt(rawValue);
-    state.seleccionUbicacion.ubicacionId = valor;
-    if (restoringSeleccion) {
-      return;
-    }
-    updateLockButtonUI();
-  }
-
-  function toggleSelectionLock(force) {
-    const nuevoEstado =
-      typeof force === "boolean" ? force : !state.seleccionUbicacion.locked;
-    state.seleccionUbicacion.locked = nuevoEstado;
-    updateLockButtonUI();
-    persistSeleccion();
-    if (!nuevoEstado) {
-      (bodegaSelect || ubicacionSelect)?.focus?.();
-    }
-  }
-
-  function handleLockButtonClick() {
-    if (state.seleccionUbicacion.locked) {
-      toggleSelectionLock(false);
-      return;
-    }
-
-    if (!state.seleccionUbicacion.bodegaId) {
-      if (typeof swalErr === "function") {
-        swalErr("Selecciona una bodega antes de bloquear la ubicacion.");
-      }
-      if (bodegaSelect) {
-        bodegaSelect.focus();
-      }
-      return;
-    }
-
-    if (!state.seleccionUbicacion.ubicacionId) {
-      if (typeof swalErr === "function") {
-        swalErr("Selecciona una ubicacion antes de bloquear la seleccion.");
-      }
-      if (ubicacionSelect) {
-        ubicacionSelect.focus();
-      }
-      return;
-    }
-
-    toggleSelectionLock(true);
-  }
-
-  function initUbicacionSelectors() {
-    if (!bodegaSelect || !ubicacionSelect || !lockButton) {
-      return;
-    }
-
+  async function initBodegaSelector() {
+    if (!bodegaSelect) return;
+    setSelectDisabled(bodegaSelect, true);
     if (hasSelect2) {
-      const bodegaPlaceholder =
-        bodegaSelect.dataset.placeholder || "Selecciona una bodega";
-      const ubicacionPlaceholder =
-        ubicacionSelect.dataset.placeholder || "Selecciona una ubicacion";
-
-      if (!isSelect2Active(bodegaSelect)) {
-        $(bodegaSelect).select2({
-          placeholder: bodegaPlaceholder,
-          allowClear: true,
-          width: "resolve",
-        });
-      }
-
-      if (!isSelect2Active(ubicacionSelect)) {
-        $(ubicacionSelect).select2({
-          placeholder: ubicacionPlaceholder,
-          allowClear: true,
-          width: "resolve",
-        });
-      }
-
-      $(bodegaSelect)
-        .off(".inventario")
-        .on("select2:select.inventario", () => {
-          handleBodegaChange($(bodegaSelect).val());
-        })
-        .on("select2:clear.inventario", () => {
-          handleBodegaChange(null);
-        });
-
-      $(ubicacionSelect)
-        .off(".inventario")
-        .on("select2:select.inventario", () => {
-          handleUbicacionChange($(ubicacionSelect).val());
-        })
-        .on("select2:clear.inventario", () => {
-          handleUbicacionChange(null);
-        });
+      $(bodegaSelect).select2({ placeholder: "Todas las bodegas", allowClear: true, width: "resolve" });
+      $(bodegaSelect).on("change.inventario", () => handleBodegaChange($(bodegaSelect).val()));
+      $(ubicacionSelect).select2({ placeholder: "Selecciona una ubicacion", allowClear: true, width: "resolve" });
+      $(ubicacionSelect).on("change.inventario", () => cambiarUbicacion($(ubicacionSelect).val()));
     } else {
       bodegaSelect.addEventListener("change", handleBodegaChange);
-      ubicacionSelect.addEventListener("change", handleUbicacionChange);
+      ubicacionSelect.addEventListener("change", (event) => cambiarUbicacion(event.target.value));
     }
-
-    lockButton.addEventListener("click", handleLockButtonClick);
-
-    populateBodegaOptions();
-    populateUbicacionOptions([]);
-    setSelectDisabled(ubicacionSelect, true);
-    updateLockButtonUI();
-
-    (async () => {
-      await loadBodegas();
-      await restoreSeleccionDesdeStorage();
-    })();
+    function cambiarUbicacion(value) {
+      if (state.locked || state.ingresoBusy) return;
+      state.ubicacionId = parsePositiveInt(value);
+      guardarUbicacion();
+      refrescarBodega();
+    }
+    lockButton.addEventListener("click", () => {
+      if (state.ingresoBusy) return;
+      state.locked = !state.locked;
+      window.bodegaSeleccion.set(state.bodegaId, state.locked);
+      guardarUbicacion();
+      refrescarBodega();
+    });
+    if (!await loadBodegas()) return;
+    state.bodegaId = parsePositiveInt(window.bodegaSeleccion.get(state.bodegas));
+    try {
+      const response = await fetch(endpoints.ubicaciones || "/inventario/ubicaciones/api/", { credentials: "same-origin" });
+      if (!response.ok) throw new Error("No fue posible cargar las ubicaciones.");
+      const data = await response.json();
+      const aplanar = (items) => items.flatMap((item) => [item, ...aplanar(item.hijos || [])]);
+      state.ubicaciones = aplanar(data.ubicaciones || []);
+      let anterior = null;
+      try { anterior = JSON.parse(localStorage.getItem(ubicacionStorageKey) || "null"); } catch (_) { /* Ignorar datos invalidos. */ }
+      if (Number(anterior?.bodegaId) === state.bodegaId
+        && state.ubicaciones.some((item) => item.id === Number(anterior?.ubicacionId) && Number(item.bodega) === state.bodegaId)) {
+        state.ubicacionId = Number(anterior.ubicacionId);
+        state.locked = Boolean(anterior.locked && window.bodegaSeleccion.isLocked());
+      }
+      state.contextoCargado = true;
+    } catch (error) {
+      if (typeof swalErr === "function") swalErr(error.message);
+    }
+    populateBodegaOptions(state.bodegaId);
+    poblarUbicaciones();
+    guardarUbicacion();
+    refrescarBodega();
   }
 
   function renderTabla(articulos) {
@@ -1074,7 +829,7 @@
         .querySelector('[data-field="existencias"]')
         ?.append(
           document.createTextNode(
-            Number(item.existencias || 0).toLocaleString("es-CO"),
+            existenciasBodega(item).toLocaleString("es-CO"),
           ),
         );
 
@@ -1090,57 +845,6 @@
     });
 
     tablaBody.appendChild(fragment);
-  }
-
-  function applyInventarioFormState() {
-    if (!inventarioForm) {
-      return;
-    }
-
-    const shouldDisableInputs =
-      inventarioForm.dataset.busy === "true" ||
-      inventarioForm.dataset.enabled !== "true";
-
-    if (inventarioCantidadInput) {
-      inventarioCantidadInput.disabled = shouldDisableInputs;
-    }
-
-    if (inventarioSubmitBtn) {
-      const disableButton =
-        shouldDisableInputs ||
-        !state.seleccionUbicacion.locked ||
-        !state.seleccionUbicacion.ubicacionId;
-      inventarioSubmitBtn.disabled = disableButton;
-    }
-  }
-
-  function toggleInventarioForm(enabled) {
-    if (!inventarioForm) {
-      return;
-    }
-    inventarioForm.dataset.enabled = enabled ? "true" : "false";
-    applyInventarioFormState();
-  }
-
-  function setInventarioFormBusy(isBusy) {
-    if (!inventarioForm) {
-      return;
-    }
-    inventarioForm.dataset.busy = isBusy ? "true" : "false";
-
-    if (inventarioSubmitBtn) {
-      if (isBusy) {
-        inventarioSubmitBtn.dataset.originalLabel =
-          inventarioSubmitBtn.dataset.originalLabel ||
-          inventarioSubmitBtn.textContent ||
-          "";
-        inventarioSubmitBtn.textContent = "Guardando...";
-      } else if (inventarioSubmitBtn.dataset.originalLabel) {
-        inventarioSubmitBtn.textContent = inventarioSubmitBtn.dataset.originalLabel;
-      }
-    }
-
-    applyInventarioFormState();
   }
 
   function renderInventarioDetalle(inventario) {
@@ -1181,6 +885,7 @@
       info.appendChild(titulo);
 
       const secundarios = [];
+      if (ubicacion.codigo_contenedor) secundarios.push(ubicacion.codigo_contenedor);
       if (ubicacion.id !== undefined && ubicacion.id !== null) {
         secundarios.push(`ID ${ubicacion.id}`);
       }
@@ -1246,75 +951,27 @@
     updateResumen(state.resumen, state.articulos);
   }
 
-  function actualizarArticuloInventario(articulo, registro, cantidad) {
-    if (!articulo) {
-      return;
-    }
-
-    const inventario = Array.isArray(articulo.inventario)
-      ? articulo.inventario
-      : (articulo.inventario = []);
-    const index = inventario.findIndex((item) => item.id === registro.id);
-    if (index >= 0) {
-      inventario[index] = registro;
-    } else {
-      inventario.push(registro);
-    }
-
-    if (Number.isFinite(Number(cantidad))) {
-      articulo.existencias = Number(articulo.existencias || 0) + Number(cantidad);
-    }
-
+  async function registrarInventario(articulo, cantidad) {
+    if (!articulo || !state.locked || !state.ubicacionId) throw new Error("Selecciona primero la bodega y ubicacion.");
+    if (!Number.isSafeInteger(cantidad) || cantidad <= 0) throw new Error("Indica una cantidad entera positiva.");
+    const response = await fetch(`${articulosEndpoint}${articulo.code}/inventario/`, {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+      body: JSON.stringify({ ubicacion: state.ubicacionId, cantidad }),
+    });
+    const registro = await response.json();
+    if (!response.ok) throw new Error(extraerMensajeError(registro, "No fue posible registrar la entrada."));
+    const existente = (articulo.inventario || []).find((item) => item.id === registro.id);
+    if (existente) Object.assign(existente, registro);
+    else (articulo.inventario ||= []).push(registro);
+    articulo.existencias = Number(articulo.existencias || 0) + cantidad;
     sincronizarResumen();
   }
 
-  async function registrarInventario(articulo, cantidad) {
-    if (!articulo || !articulo.code) {
-      throw new Error("Articulo invalido. Recarga la pagina e intenta de nuevo.");
-    }
-
-    if (
-      !state.seleccionUbicacion.locked ||
-      !state.seleccionUbicacion.ubicacionId
-    ) {
-      throw new Error(
-        "Bloquea la bodega y la ubicacion antes de registrar existencias.",
-      );
-    }
-
-    const url = `${articulosEndpoint}${articulo.code}/inventario/`;
-    const headers = {
-      "Content-Type": "application/json",
-    };
-    if (csrfToken) {
-      headers["X-CSRFToken"] = csrfToken;
-    }
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      credentials: "same-origin",
-      body: JSON.stringify({
-        ubicacion: state.seleccionUbicacion.ubicacionId,
-        cantidad,
-      }),
-    });
-
-    const data = await response.json().catch(() => null);
-    if (!response.ok || !data) {
-      throw new Error(
-        extraerMensajeError(
-          data,
-          "No fue posible registrar el ingreso de inventario.",
-        ),
-      );
-    }
-
-    actualizarArticuloInventario(articulo, data, cantidad);
-    return data;
-  }
-
   function renderDetalle(articulo) {
+    const historialLink = document.querySelector("#historialArticuloLink");
+    historialLink.href = articulo ? `${config.endpoints.historial}?modo=id&articulo=${encodeURIComponent(articulo.code)}` : config.endpoints.historial;
+    actualizarContextoUI();
     closeLightbox();
     lightboxIndex = 0;
 
@@ -1324,11 +981,6 @@
         "Selecciona un articulo del listado para revisar su informacion y fotografias.";
       detalleMeta.innerHTML = "";
       detalleGaleria.innerHTML = "";
-      if (inventarioForm) {
-        inventarioForm.reset();
-        inventarioForm.dataset.articulo = "";
-        toggleInventarioForm(false);
-      }
       renderInventarioDetalle([]);
       return;
     }
@@ -1351,7 +1003,7 @@
       },
       {
         label: "Existencias",
-        value: `${Number(articulo.existencias || 0).toLocaleString(
+        value: `${existenciasBodega(articulo).toLocaleString(
           "es-CO",
         )} unidades`,
         highlight: true,
@@ -1375,17 +1027,8 @@
       )
       .join("");
 
-    renderInventarioDetalle(articulo.inventario);
+    renderInventarioDetalle(inventarioBodega(articulo));
 
-    if (inventarioForm) {
-      const articuloId = String(articulo.code ?? "");
-      const previo = inventarioForm.dataset.articulo;
-      inventarioForm.dataset.articulo = articuloId;
-      if (previo !== articuloId) {
-        inventarioForm.reset();
-      }
-      toggleInventarioForm(true);
-    }
 
     const fotos = Array.isArray(articulo.fotos) ? articulo.fotos : [];
     if (!fotos.length) {
@@ -1404,75 +1047,6 @@
           `,
         )
         .join("");
-    }
-  }
-
-  async function handleInventarioSubmit(event) {
-    event.preventDefault();
-
-    if (!inventarioForm || inventarioForm.dataset.busy === "true") {
-      return;
-    }
-
-    if (!state.seleccionado) {
-      return;
-    }
-
-    if (typeof inventarioForm.reportValidity === "function" && !inventarioForm.reportValidity()) {
-      return;
-    }
-
-    if (!state.seleccionUbicacion.bodegaId) {
-      if (typeof swalErr === "function") {
-        swalErr("Selecciona una bodega antes de registrar ingresos.");
-      }
-      bodegaSelect?.focus?.();
-      return;
-    }
-
-    if (
-      !state.seleccionUbicacion.locked ||
-      !state.seleccionUbicacion.ubicacionId
-    ) {
-      if (typeof swalErr === "function") {
-        swalErr("Bloquea la bodega y la ubicacion antes de registrar ingresos.");
-      }
-      return;
-    }
-
-    const articulo = state.seleccionado;
-    const cantidad = Number.parseInt(
-      inventarioCantidadInput?.value ?? "",
-      10,
-    );
-
-    if (!Number.isFinite(cantidad) || cantidad <= 0) {
-      if (typeof swalErr === "function") {
-        swalErr("Ingresa una cantidad valida mayor a cero.");
-      }
-      return;
-    }
-
-    setInventarioFormBusy(true);
-
-    try {
-      await registrarInventario(articulo, cantidad);
-      inventarioForm.reset();
-      inventarioCantidadInput?.focus();
-
-      renderTabla(state.filtrados);
-      seleccionarArticulo(articulo.code);
-
-      if (typeof swalToast === "function") {
-        swalToast("success", "Inventario actualizado correctamente");
-      }
-    } catch (error) {
-      console.error(error);
-      if (typeof swalErr === "function") {
-        swalErr(error.message);
-      }
-    } finally {
-      setInventarioFormBusy(false);
     }
   }
 
@@ -1569,18 +1143,21 @@
 
   async function enviarFormulario(event) {
     event.preventDefault();
+    if (state.ingresoBusy) return;
     setFormBusy(true);
 
     const formData = new FormData(form);
-    const cantidadInicialValor = Number.parseInt(
-      formData.get("cantidad_inicial") ?? "",
-      10,
-    );
+    const cantidadInicial = Number(formData.get("cantidad_inicial") || 0);
     formData.delete("cantidad_inicial");
-    const cantidadInicial =
-      Number.isFinite(cantidadInicialValor) && cantidadInicialValor > 0
-        ? cantidadInicialValor
-        : 0;
+    if (!Number.isSafeInteger(cantidadInicial) || cantidadInicial < 0 || (cantidadInicial > 0 && !state.locked)) {
+      if (typeof swalErr === "function") swalErr("Para ingresar una cantidad inicial, confirma primero la bodega y ubicacion. La cantidad debe ser un entero positivo.");
+      setFormBusy(false);
+      return;
+    }
+    if (cantidadInicial > 0) {
+      state.ingresoBusy = true;
+      actualizarContextoUI();
+    }
     if (!formData.get("marca")) {
       formData.delete("marca");
     }
@@ -1648,27 +1225,11 @@
         state.articulos = [nuevoArticulo];
       }
 
-      const puedeRegistrarInventario =
-        cantidadInicial > 0 &&
-        state.seleccionUbicacion.locked &&
-        state.seleccionUbicacion.ubicacionId;
-
-      if (puedeRegistrarInventario) {
-        try {
-          await registrarInventario(nuevoArticulo, cantidadInicial);
-        } catch (errorInventario) {
-          console.error(errorInventario);
-          if (typeof swalErr === "function") {
-            swalErr(
-              `El articulo se creo, pero no fue posible registrar inventario: ${errorInventario.message}`,
-            );
-          }
-          sincronizarResumen();
-        }
-      } else {
-        sincronizarResumen();
+      if (cantidadInicial > 0) {
+        try { await registrarInventario(nuevoArticulo, cantidadInicial); }
+        catch (error) { if (typeof swalErr === "function") swalErr(`Articulo creado. No se pudo registrar la entrada: ${error.message}`); }
       }
-
+      sincronizarResumen();
       filtrarArticulos(searchInput?.value || "");
       seleccionarArticulo(nuevoArticulo.code);
     } catch (error) {
@@ -1678,6 +1239,8 @@
       }
     } finally {
       setFormBusy(false);
+      state.ingresoBusy = false;
+      actualizarContextoUI();
     }
   }
 
@@ -1706,7 +1269,24 @@
   function initEventos() {
     form.addEventListener("submit", enviarFormulario);
 
-    initUbicacionSelectors();
+    initBodegaSelector();
+    inventarioForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (state.ingresoBusy || !inventarioForm.reportValidity()) return;
+      state.ingresoBusy = true;
+      actualizarContextoUI();
+      try {
+        await registrarInventario(state.seleccionado, Number(inventarioCantidadInput.value));
+        inventarioForm.reset();
+        refrescarBodega();
+        if (typeof swalToast === "function") swalToast("success", "Inventario actualizado correctamente");
+      } catch (error) {
+        if (typeof swalErr === "function") swalErr(error.message);
+      } finally {
+        state.ingresoBusy = false;
+        actualizarContextoUI();
+      }
+    });
     initFormularioSelects();
     loadMarcas();
     loadUnidadesMedida();
@@ -1767,13 +1347,6 @@
       });
     }
 
-    if (inventarioForm) {
-      inventarioForm.dataset.enabled = "false";
-      inventarioForm.dataset.busy = "false";
-      inventarioForm.addEventListener("submit", handleInventarioSubmit);
-      renderInventarioDetalle([]);
-      toggleInventarioForm(false);
-    }
 
     if (detalleGaleria) {
       detalleGaleria.addEventListener("click", (event) => {

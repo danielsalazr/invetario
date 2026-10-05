@@ -17,11 +17,13 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include, re_path
 from django.views.static import serve
+from django.views.generic import RedirectView
 from . import settings
 from django.conf.urls.static import static
 
 urlpatterns = [
 
+    path('', RedirectView.as_view(pattern_name='articulo', permanent=False), name='inicio'),
     path('admin/', admin.site.urls),
     # path('', include('login.urls')),
     path('inventario/', include('almacen.urls')),
@@ -32,4 +34,3 @@ urlpatterns = [
 
 #re_path(r'media/(?P<path>.*)$',serve,{'document_root':settings.MEDIA_ROOT}),
 re_path(r'^static/(?P<path>.*)$', serve,{'document_root': settings.STATICFILES_DIRS}), 
-

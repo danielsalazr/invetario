@@ -821,10 +821,12 @@
 <section class="inventory-page">
   <header class="inventory-header">
     <div>
-      <h1>Gestiona tu inventario</h1>
+      <h1>{% block titulo_articulos %}Gestiona tu inventario{% endblock %}</h1>
       <p>
+        {% block descripcion_articulos %}
         Registra productos, consulta existencias y controla las ubicaciones sin
         salir de esta pantalla.
+        {% endblock %}
       </p>
     </div>
     <div class="inventory-actions">
@@ -832,25 +834,14 @@
         Gestionar ubicaciones
       </a>
       <div class="inventory-select-wrapper">
-        <label class="sr-only" for="selectorBodega">Seleccionar bodega</label>
-        <select id="selectorBodega" data-placeholder="Selecciona una bodega"></select>
+        <label for="selectorBodega">Bodega de trabajo</label>
+        <select id="selectorBodega" data-placeholder="Todas las bodegas"></select>
       </div>
       <div class="inventory-select-wrapper">
-        <label class="sr-only" for="selectorUbicacion">Seleccionar ubicacion</label>
-        <select
-          id="selectorUbicacion"
-          data-placeholder="Selecciona una ubicacion"
-          disabled
-        ></select>
+        <label for="selectorUbicacion">Ubicación de trabajo</label>
+        <select id="selectorUbicacion" data-placeholder="Selecciona una ubicación" disabled></select>
       </div>
-      <button
-        type="button"
-        id="bloquearUbicacionBtn"
-        class="secondary-button lock-button"
-        disabled
-      >
-        Seleccionar ubicacion
-      </button>
+      <button type="button" id="bloquearUbicacionBtn" class="secondary-button lock-button" disabled>Seleccionar ubicación</button>
       <div class="search-box">
         <input
           type="search"
@@ -902,16 +893,11 @@
 
       <form id="formArticulo" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
+        <p class="form-hint">Las entradas se registran en la bodega y ubicación seleccionadas en la cabecera.</p>
         <div class="form-grid">
           <div class="form-group">
-            <label for="cantidad_inicial">Cantidad a ingresar</label>
-            <input
-              type="number"
-              name="cantidad_inicial"
-              id="cantidad_inicial"
-              min="0"
-              placeholder="Cantidad inicial (opcional)"
-            />
+            <label for="cantidad_inicial">Cantidad a ingresar (opcional)</label>
+            <input type="number" name="cantidad_inicial" id="cantidad_inicial" min="0" step="1" placeholder="Cantidad inicial" />
           </div>
 
           <div class="form-group">
@@ -1050,37 +1036,25 @@
           </p>
         </div>
         <p class="form-hint" id="inventarioSeleccionResumen">
-          Selecciona una bodega y una ubicacion para registrar movimientos.
+          Elige una bodega para consultar sus existencias.
         </p>
         <div class="empty-state-card" id="detalleInventarioVacio">
           Este articulo no tiene unidades asociadas a ubicaciones.
         </div>
         <ul class="location-list" id="detalleInventarioLista"></ul>
-        <form class="inventory-location-form" id="formInventario" autocomplete="off">
+        <form class="inventory-location-form" id="formInventario">
           <div class="form-row">
-            <input
-              type="number"
-              id="inventarioCantidad"
-              name="cantidad"
-              min="1"
-              placeholder="Cantidad a ingresar"
-              required
-              disabled
-            />
-            <button
-              type="submit"
-              class="primary-button"
-              id="agregarInventarioBtn"
-              disabled
-            >
-              Registrar ingreso
-            </button>
+            <input type="number" id="inventarioCantidad" min="1" step="1" placeholder="Cantidad a ingresar" required disabled />
+            <button type="submit" id="agregarInventarioBtn" class="primary-button" disabled>Registrar ingreso</button>
           </div>
-          <p class="form-hint">
-            La bodega y ubicacion se eligen en la barra superior. Asegurate de
-            bloquear la seleccion antes de registrar movimientos.
-          </p>
+          <p class="form-hint">Selecciona la bodega y la ubicación en la cabecera para registrar entradas.</p>
         </form>
+        <div class="inventory-actions">
+          <a href="{% url 'almacenar' %}" class="secondary-button">Almacenar</a>
+          <a href="{% url 'picking' %}" class="secondary-button">Picking</a>
+          <a href="{% url 'traslados' %}" class="secondary-button">Traslados</a>
+          <a href="{% url 'historial_movimientos' %}" id="historialArticuloLink" class="secondary-button">Ver histórico</a>
+        </div>
       </div>
       <div class="gallery-grid" id="detalleGaleria"></div>
     </aside>
@@ -1146,6 +1120,7 @@
 <script>
   window.inventarioConfig = {
     endpoints: {
+      historial: "{% url 'historial_movimientos' %}",
       articulos: "{% url 'articulos' %}",
       ubicaciones: "{% url 'ubicaciones_api' %}",
       bodegas: "{% url 'bodegas_api' %}",

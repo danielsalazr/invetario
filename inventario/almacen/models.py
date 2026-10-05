@@ -1,4 +1,5 @@
 from django.db import models, transaction
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 from PIL import Image
 from rich.console import Console
@@ -34,7 +35,7 @@ class Ubicacion(models.Model):
         Tipo.ESTIBA: {None},
         Tipo.PANEL: {Tipo.ESTANTE},
         Tipo.DIVISION: {Tipo.PANEL},
-        Tipo.CONTENEDOR: {None, Tipo.ESTANTE, Tipo.ESTIBA, Tipo.PANEL, Tipo.DIVISION},
+        Tipo.CONTENEDOR: {None, Tipo.ESTANTE, Tipo.ESTIBA, Tipo.PANEL, Tipo.DIVISION, Tipo.CONTENEDOR},
     }
 
     id = models.AutoField(primary_key=True)
@@ -50,6 +51,9 @@ class Ubicacion(models.Model):
     )
     numero = models.PositiveIntegerField(default=0)
     nomenclatura = models.CharField(max_length=50, blank=True)
+    codigo_contenedor = models.CharField(
+        max_length=30, unique=True, null=True, blank=True, editable=False,
+    )
     bodega = models.ForeignKey(Bodega, on_delete=models.CASCADE, related_name="ubicaciones")
     descripcion = models.CharField(max_length=120, blank=True)
     creado_en = models.DateTimeField(auto_now_add=True, null=True, blank=True)
@@ -70,6 +74,10 @@ class Ubicacion(models.Model):
         return self.ruta
 
     @property
+    def es_movil(self):
+        return self.tipo == self.Tipo.CONTENEDOR
+
+    @property
     def ruta(self):
         partes = [self.nombre]
         padre = self.padre
@@ -88,6 +96,21 @@ class Ubicacion(models.Model):
         if padre and padre.pk == self.pk:
             raise ValidationError({"padre": "La ubicacion no puede ser su propio padre."})
 
+        vistos = {self.pk} if self.pk else set()
+        ancestro = padre
+        while ancestro:
+            if ancestro.pk in vistos:
+                raise ValidationError({"padre": "No puedes colocar un contenedor dentro de uno de sus descendientes."})
+            vistos.add(ancestro.pk)
+            ancestro = ancestro.padre
+
+        if self.pk and not self._state.adding:
+            anterior = type(self).objects.get(pk=self.pk)
+            if anterior.codigo_contenedor != self.codigo_contenedor:
+                raise ValidationError({"codigo_contenedor": "El codigo del contenedor es permanente."})
+            if anterior.es_movil != self.es_movil:
+                raise ValidationError({"tipo": "No puedes convertir una ubicacion fija en contenedor ni un contenedor en ubicacion fija."})
+
         tipos_validos = self.PADRES_VALIDOS.get(tipo, {None})
         padre_tipo = padre.tipo if padre else None
         if padre_tipo not in tipos_validos:
@@ -97,7 +120,7 @@ class Ubicacion(models.Model):
                 self.Tipo.PANEL: "Un panel debe pertenecer a un estante.",
                 self.Tipo.DIVISION: "Una division debe pertenecer a un panel.",
                 self.Tipo.CONTENEDOR: (
-                    "Un contenedor debe pertenecer a un estante, estiba, panel o division, o quedar sin padre."
+                    "Un contenedor debe pertenecer a una ubicacion fija u otro contenedor, o quedar sin padre."
                 ),
             }
             raise ValidationError({"padre": mensajes.get(tipo, "Padre invalido para este tipo.")})
@@ -106,18 +129,24 @@ class Ubicacion(models.Model):
             raise ValidationError({"padre": "La ubicacion padre debe pertenecer a la misma bodega."})
 
         self.nivel = nivel_calculado or 1
+        if len(self.calcular_nomenclatura()) > 50:
+            raise ValidationError({"padre": "La ruta excede la longitud permitida de la nomenclatura."})
 
     def calcular_nomenclatura(self):
         numeros = []
         nodo = self
         while nodo:
-            if nodo.numero:
+            if nodo.es_movil:
+                numeros.append(f"C{nodo.pk}" if nodo.pk else "C")
+            elif nodo.numero:
                 numeros.append(str(nodo.numero))
             nodo = nodo.padre
         return "_".join(reversed(numeros))
 
     def refrescar_nomenclatura(self, cascade=False):
         nueva = self.calcular_nomenclatura()
+        if len(nueva) > self._meta.get_field("nomenclatura").max_length:
+            raise ValidationError({"padre": "La ruta de un contenedor interno excede la longitud permitida."})
         if self.nomenclatura != nueva:
             type(self).objects.filter(pk=self.pk).update(nomenclatura=nueva)
             self.nomenclatura = nueva
@@ -168,19 +197,10 @@ class Ubicacion(models.Model):
             for item in items:
                 item.refrescar_nomenclatura(cascade=True)
 
-    def reasignar_contenedores_de_panel(self):
-        panel = self.padre
-        if not panel:
-            return
-        contenedores = type(self).objects.filter(padre=panel, tipo=self.Tipo.CONTENEDOR)
-        if not contenedores.exists():
-            return
-        contenedores.update(padre=self)
-        type(self).recalcular_scope(self.Tipo.CONTENEDOR, panel.id, panel.bodega_id)
-        type(self).recalcular_scope(self.Tipo.CONTENEDOR, self.id, self.bodega_id)
-
+    @transaction.atomic
     def save(self, *args, **kwargs):
-        self.full_clean()
+        # Orden de bloqueo comun con los movimientos para evitar carreras del arbol.
+        list(Bodega.objects.select_for_update().order_by("pk").values_list("pk", flat=True))
         is_new = self._state.adding
 
         prev_padre_id = prev_bodega_id = prev_tipo = None
@@ -189,17 +209,22 @@ class Ubicacion(models.Model):
             prev_padre_id = previo.padre_id
             prev_bodega_id = previo.bodega_id
             prev_tipo = previo.tipo
+            if (
+                previo.es_movil
+                and (prev_padre_id != self.padre_id or prev_bodega_id != self.bodega_id)
+                and not getattr(self, "_movimiento_interno", False)
+            ):
+                from .services import mover_contenedor
+                mover_contenedor(self, self.padre_id, self.bodega_id)
+                return
 
-        asignar_contenedores = False
-        if is_new and self.tipo == self.Tipo.DIVISION and self.padre_id:
-            asignar_contenedores = not type(self).objects.filter(
-                padre_id=self.padre_id, tipo=self.Tipo.DIVISION
-            ).exists()
+        self.full_clean()
 
         super().save(*args, **kwargs)
 
-        if is_new and self.tipo == self.Tipo.DIVISION and asignar_contenedores:
-            self.reasignar_contenedores_de_panel()
+        if is_new and self.es_movil:
+            self.codigo_contenedor = f"C{self.pk}"
+            type(self).objects.filter(pk=self.pk).update(codigo_contenedor=self.codigo_contenedor)
 
         type(self).recalcular_scope(self.tipo, self.padre_id, self.bodega_id)
 
@@ -217,6 +242,24 @@ class Ubicacion(models.Model):
             type(self).recalcular_scope(self.Tipo.CONTENEDOR, self.id, self.bodega_id)
 
         self.refresh_from_db(fields=["numero", "nomenclatura"])
+
+
+class MovimientoContenedor(models.Model):
+    contenedor = models.ForeignKey(Ubicacion, on_delete=models.PROTECT, related_name="movimientos")
+    contenedor_principal = models.ForeignKey(Ubicacion, on_delete=models.PROTECT, related_name="traslados_realizados")
+    origen = models.ForeignKey(Ubicacion, on_delete=models.SET_NULL, null=True, blank=True, related_name="movimientos_desde")
+    destino = models.ForeignKey(Ubicacion, on_delete=models.SET_NULL, null=True, blank=True, related_name="movimientos_hacia")
+    bodega_origen = models.ForeignKey(Bodega, on_delete=models.PROTECT, related_name="movimientos_desde")
+    bodega_destino = models.ForeignKey(Bodega, on_delete=models.PROTECT, related_name="movimientos_hacia")
+    ruta_origen = models.TextField()
+    ruta_destino = models.TextField()
+    fecha = models.DateTimeField(auto_now_add=True)
+    usuario = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        ordering = ("-fecha", "-id")
+        verbose_name = "Movimiento de contenedor"
+        verbose_name_plural = "Movimientos de contenedores"
 
 
 
@@ -416,19 +459,67 @@ class Inventario(models.Model):
 
 
 
-class Entradas(models.Model):
+class ContextoMovimientoArticulo(models.Model):
+    """Datos capturados al crear el registro; no dependen de traslados posteriores."""
+    bodega_movimiento = models.ForeignKey(Bodega, on_delete=models.PROTECT, null=True, blank=True, related_name="+")
+    nombre_bodega = models.CharField(max_length=30, blank=True)
+    ruta_ubicacion = models.TextField(blank=True)
+    codigo_ubicacion = models.CharField(max_length=100, blank=True)
+    descripcion_articulo = models.TextField(blank=True)
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            articulo = getattr(self, "articulo", None) or getattr(self, "Articulo", None)
+            self.descripcion_articulo = articulo.descripcion if articulo else ""
+            if self.ubicacion_id:
+                ubicacion = Ubicacion.objects.select_related("bodega").get(pk=self.ubicacion_id)
+                self.bodega_movimiento = ubicacion.bodega
+                self.nombre_bodega = ubicacion.bodega.nombre
+                self.ruta_ubicacion = ubicacion.ruta
+                self.codigo_ubicacion = ubicacion.codigo_contenedor or ubicacion.nomenclatura or str(ubicacion.pk)
+        super().save(*args, **kwargs)
+
+
+class Entradas(ContextoMovimientoArticulo):
     id = models.AutoField(primary_key=True)
     articulo = models.ForeignKey(Articulo, on_delete=models.DO_NOTHING, related_name="articuloe",)
     cantidad = models.IntegerField(default=1)
-    fecha = models.DateTimeField(auto_now=timezone.now)
+    ubicacion = models.ForeignKey(Ubicacion, on_delete=models.PROTECT, null=True, blank=True, related_name="entradas")
+    fecha = models.DateTimeField(auto_now_add=True)
 
 
 
-class Salidas(models.Model):
+class Salidas(ContextoMovimientoArticulo):
     id = models.AutoField(primary_key=True)
     Articulo = models.ForeignKey(Articulo, on_delete=models.DO_NOTHING, related_name="articulos",)
     cantidad = models.IntegerField(default=1)
-    fecha = models.DateTimeField(auto_now=timezone.now)
+    ubicacion = models.ForeignKey(Ubicacion, on_delete=models.PROTECT, null=True, blank=True, related_name="salidas")
+    fecha = models.DateTimeField(auto_now_add=True)
 
 
-# class Movimientos(models.Model):
+class TrasladoArticulo(models.Model):
+    articulo = models.ForeignKey(Articulo, on_delete=models.PROTECT, related_name="traslados")
+    origen = models.ForeignKey(Ubicacion, on_delete=models.PROTECT, related_name="traslados_desde")
+    destino = models.ForeignKey(Ubicacion, on_delete=models.PROTECT, related_name="traslados_hacia")
+    bodega_origen = models.ForeignKey(Bodega, on_delete=models.PROTECT, related_name="traslados_articulos_desde")
+    bodega_destino = models.ForeignKey(Bodega, on_delete=models.PROTECT, related_name="traslados_articulos_hacia")
+    cantidad = models.PositiveIntegerField()
+    fecha = models.DateTimeField(auto_now_add=True, db_index=True)
+    usuario = models.ForeignKey("auth.User", on_delete=models.SET_NULL, null=True, blank=True)
+    descripcion_articulo = models.TextField()
+    nombre_bodega_origen = models.CharField(max_length=30)
+    nombre_bodega_destino = models.CharField(max_length=30)
+    ruta_origen = models.TextField()
+    ruta_destino = models.TextField()
+    codigo_origen = models.CharField(max_length=100)
+    codigo_destino = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ("-fecha", "-id")
+        constraints = [
+            models.CheckConstraint(check=models.Q(cantidad__gt=0), name="traslado_cantidad_positiva"),
+            models.CheckConstraint(check=~models.Q(origen=models.F("destino")), name="traslado_ubicaciones_distintas"),
+        ]
