@@ -169,6 +169,19 @@ El ajuste a bodega de destino y tabla de movimientos no requiere una nueva migra
 - `ALLOWED_HOSTS=['*']` y las API carecen de permisos explícitos; estas configuraciones deben revisarse para despliegue.
 - Las imágenes faltantes deben recuperarse de un respaldo de `media/` si se necesitan todas las fotos históricas.
 
+## Creación de ubicaciones y contenedores
+
+El menú **Gestión de ubicaciones** incluye dos opciones en su submenú:
+
+- **Nueva ubicación** (`/inventario/ubicaciones/nueva/`): crea estantes, estibas, paneles o divisiones. Elige la bodega, el tipo fijo y, cuando corresponda, una ubicación padre del mapa.
+- **Nuevo contenedor** (`/inventario/ubicaciones/contenedores/nuevo/`): crea una caja o recipiente móvil. Indica el nombre y la bodega; selecciona una ubicación o caja en el mapa y pulsa **Usar como posición inicial**. Si no eliges una posición, se crea directamente en la bodega. El código `C<id>` y la nomenclatura se calculan automáticamente.
+
+Ambas opciones muestran el mismo mapa de ubicaciones y contenedores. Los registros continúan en `Ubicacion`, conservando las relaciones con inventario e historial. Los endpoints de creación separados son `POST /inventario/ubicaciones/fijas/api/` y `POST /inventario/ubicaciones/contenedores/api/`; validan la clase de registro, el padre y la bodega. La API general sigue disponible para compatibilidad. No requiere una migración.
+
+## Registro de artículos
+
+En **Artículos**, el botón **Nuevo artículo** abre el formulario de registro en un modal. También está disponible desde Inicio. Puedes cerrarlo con la X o Escape; los datos se conservan mientras permanezcas en la página y la cámara se detiene al cerrar. Al guardar correctamente, el modal se cierra, el formulario se limpia y el nuevo artículo aparece en el listado. Los errores de registro se muestran dentro del modal y conservan la información ingresada. El listado y el detalle ocupan el espacio que antes tenía la tarjeta de registro.
+
 ## Guía de nomenclatura para usuarios
 
 Disponible en el menú **Guía de nomenclatura**, en `/inventario/ayuda/nomenclatura/`.

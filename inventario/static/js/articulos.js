@@ -11,7 +11,8 @@
   const hasSelect2 = Boolean($ && $.fn && $.fn.select2);
 
   const form = document.querySelector("#formArticulo");
-  const panelFormulario = document.querySelector("#panelFormulario");
+  const dialogoArticulo = document.querySelector("#dialogoArticulo");
+  const errorFormulario = document.querySelector("#errorFormularioArticulo");
   const abrirFormularioBtn = document.querySelector("#mostrarFormulario");
   const cerrarFormularioBtn = document.querySelector("#cerrarFormulario");
   const guardarBtn = document.querySelector("#guardarArticulo");
@@ -188,6 +189,7 @@
   function setFormBusy(isBusy) {
     if (!guardarBtn) return;
     guardarBtn.disabled = isBusy;
+    if (cerrarFormularioBtn) cerrarFormularioBtn.disabled = isBusy;
     guardarBtn.textContent = isBusy
       ? "Guardando..."
       : "Guardar articulo";
@@ -573,6 +575,7 @@
           placeholder: marcaSelect.dataset.placeholder || "Selecciona una marca",
           allowClear: true,
           width: "resolve",
+          dropdownParent: $(dialogoArticulo),
         });
       }
       if (unidadSelect && !isSelect2Active(unidadSelect)) {
@@ -580,6 +583,7 @@
           placeholder: unidadSelect.dataset.placeholder || "Selecciona una unidad",
           allowClear: true,
           width: "resolve",
+          dropdownParent: $(dialogoArticulo),
         });
       }
     }
@@ -1144,13 +1148,16 @@
   async function enviarFormulario(event) {
     event.preventDefault();
     if (state.ingresoBusy) return;
+    errorFormulario.hidden = true;
+    if (!form.reportValidity()) return;
     setFormBusy(true);
 
     const formData = new FormData(form);
     const cantidadInicial = Number(formData.get("cantidad_inicial") || 0);
     formData.delete("cantidad_inicial");
     if (!Number.isSafeInteger(cantidadInicial) || cantidadInicial < 0 || (cantidadInicial > 0 && !state.locked)) {
-      if (typeof swalErr === "function") swalErr("Para ingresar una cantidad inicial, confirma primero la bodega y ubicacion. La cantidad debe ser un entero positivo.");
+      errorFormulario.textContent = "Para ingresar una cantidad inicial, confirma primero la bodega y ubicacion. La cantidad debe ser un entero positivo.";
+      errorFormulario.hidden = false;
       setFormBusy(false);
       return;
     }
@@ -1197,6 +1204,7 @@
       }
 
       const nuevoArticulo = await response.json();
+      dialogoArticulo.close();
       if (typeof swalToast === "function") {
         swalToast("success", "Articulo guardado correctamente");
       }
@@ -1234,7 +1242,10 @@
       seleccionarArticulo(nuevoArticulo.code);
     } catch (error) {
       console.error(error);
-      if (typeof swalErr === "function") {
+      if (dialogoArticulo.open) {
+        errorFormulario.textContent = error.message;
+        errorFormulario.hidden = false;
+      } else if (typeof swalErr === "function") {
         swalErr(error.message);
       }
     } finally {
@@ -1259,15 +1270,25 @@
   }
 
   function toggleFormulario(visible) {
-    if (!panelFormulario) return;
-    panelFormulario.dataset.collapsed = visible ? "false" : "true";
+    if (!dialogoArticulo) return;
     if (visible) {
+      errorFormulario.hidden = true;
+      if (!dialogoArticulo.open) dialogoArticulo.showModal();
       form.querySelector("#descripcion")?.focus();
+    } else if (!guardarBtn.disabled) {
+      dialogoArticulo.close();
     }
   }
 
   function initEventos() {
     form.addEventListener("submit", enviarFormulario);
+    dialogoArticulo.addEventListener("cancel", (event) => {
+      if (guardarBtn.disabled) event.preventDefault();
+    });
+    dialogoArticulo.addEventListener("close", () => {
+      closeCamera();
+      abrirFormularioBtn?.focus();
+    });
 
     initBodegaSelector();
     inventarioForm.addEventListener("submit", async (event) => {

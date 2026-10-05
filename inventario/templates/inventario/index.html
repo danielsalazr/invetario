@@ -227,7 +227,7 @@
 
   .inventory-layout {
     display: grid;
-    grid-template-columns: 360px 1fr 320px;
+    grid-template-columns: minmax(0, 1fr) 320px;
     gap: 1.5rem;
   }
 
@@ -241,6 +241,19 @@
     gap: 1rem;
     position: relative;
   }
+
+  .article-dialog {
+    width: min(680px, calc(100vw - 2rem));
+    max-height: 90vh;
+    padding: 0;
+    border: 0;
+    border-radius: 16px;
+    overflow-y: auto;
+    color: var(--color-text);
+  }
+  .article-dialog::backdrop { background: rgba(15, 23, 42, .55); }
+  .article-dialog .select2-container { width: 100% !important; }
+  .article-form-error { color: #b91c1c; margin: 0; }
 
   .form-header {
     display: flex;
@@ -778,20 +791,11 @@
     transform: none;
   }
 
-  .inventory-form[data-collapsed="true"] {
-    transform: translateX(-12px);
-    opacity: 0.25;
-    pointer-events: none;
-  }
-
   @media (max-width: 1200px) {
     .inventory-layout {
       grid-template-columns: 1fr;
     }
 
-    .inventory-form[data-collapsed="true"] {
-      transform: translateY(-8px);
-    }
   }
 
   @media (max-width: 768px) {
@@ -853,7 +857,7 @@
           &times;
         </button>
       </div>
-      <button type="button" id="mostrarFormulario" class="primary-button">
+      <button type="button" id="mostrarFormulario" class="primary-button" aria-haspopup="dialog" aria-controls="dialogoArticulo">
         Nuevo articulo
       </button>
     </div>
@@ -878,11 +882,11 @@
     </article>
   </section>
 
-  <section class="inventory-layout">
-    <aside class="inventory-form" id="panelFormulario" data-collapsed="false">
+  <dialog id="dialogoArticulo" class="article-dialog" aria-labelledby="formularioTitulo">
+    <section class="inventory-form" id="panelFormulario">
       <div class="form-header">
         <h2 id="formularioTitulo">Registrar articulo</h2>
-        <button type="button" class="icon-button" id="cerrarFormulario">
+        <button type="button" class="icon-button" id="cerrarFormulario" aria-label="Cerrar registro de artículo">
           &times;
         </button>
       </div>
@@ -893,6 +897,7 @@
 
       <form id="formArticulo" enctype="multipart/form-data" novalidate>
         {% csrf_token %}
+        <p id="errorFormularioArticulo" class="article-form-error" role="alert" hidden></p>
         <p class="form-hint">Las entradas se registran en la bodega y ubicación seleccionadas en la cabecera.</p>
         <div class="form-grid">
           <div class="form-group">
@@ -997,8 +1002,9 @@
           <span class="hint">Los campos marcados con * son obligatorios.</span>
         </div>
       </form>
-    </aside>
-
+    </section>
+  </dialog>
+  <section class="inventory-layout">
     <section class="inventory-table-card">
       <table aria-describedby="tablaArticulos">
         <thead>
@@ -1131,6 +1137,6 @@
 </script>
 
 <script src="{% static 'js/sweetAlert.js' %}"></script>
-<script src="{% static 'js/articulos.js' %}"></script>
+<script src="{% static 'js/articulos.js' %}?v=20261005-modal-registro"></script>
 
 {% endblock container %}

@@ -573,6 +573,7 @@
   }
 </style>
 
+<style>.form-group[hidden] { display: none; }</style>
 <section class="layout">
   <aside class="card tree-container">
     <header>
@@ -625,8 +626,9 @@
 
   <section class="card">
     <header>
-      <h2>Crear ubicación o contenedor</h2>
-      <p>Los contenedores reciben un código permanente y pueden guardarse en ubicaciones fijas o dentro de otros contenedores.</p>
+      <h2>{% if modo_creacion == 'contenedor' %}Nuevo contenedor{% else %}Nueva ubicación{% endif %}</h2>
+      <p>{% if modo_creacion == 'contenedor' %}Dale un nombre a la caja y elige dónde guardarla. Su código C se asigna automáticamente y se conserva al moverla.{% else %}Crea un lugar fijo dentro de la bodega: un estante, una estiba, un panel o una división.{% endif %}</p>
+      <nav aria-label="Tipo de registro"><a href="{% url 'nueva_ubicacion' %}">Nueva ubicación</a> · <a href="{% url 'nuevo_contenedor' %}">Nuevo contenedor</a></nav>
     </header>
     <form id="formUbicacion" class="form-wrapper" novalidate>
       {% csrf_token %}
@@ -638,8 +640,8 @@
         </select>
       </div>
 
-      <div class="form-group">
-        <label for="tipo">Tipo de ubicación *</label>
+      <div class="form-group" {% if modo_creacion == 'contenedor' %}hidden{% endif %}>
+        <label for="tipo">Tipo de ubicación fija *</label>
         <select name="tipo" id="tipo" required>
           <option value="">Selecciona un tipo</option>
         </select>
@@ -647,7 +649,7 @@
       </div>
 
       <div class="form-group">
-        <label for="padreNombre">Ubicación padre</label>
+        <label for="padreNombre">{% if modo_creacion == 'contenedor' %}Posición inicial (ubicación o contenedor){% else %}Ubicación padre{% endif %}</label>
         <input
           type="text"
           id="padreNombre"
@@ -668,11 +670,11 @@
           id="nombre"
           maxlength="60"
           required
-          placeholder="Ej: Estante A"
+          placeholder="{% if modo_creacion == 'contenedor' %}Ej: Caja de tornillos{% else %}Ej: Estante A{% endif %}"
         />
       </div>
 
-      <div class="form-group">
+      <div class="form-group" {% if modo_creacion == 'contenedor' %}hidden{% endif %}>
         <label for="nomenclatura">Nomenclatura de ubicación</label>
         <input
           type="text"
@@ -695,7 +697,7 @@
 
       <div class="form-actions">
         <button type="submit" class="btn-primary" id="guardarUbicacion">
-          Guardar ubicación
+          {% if modo_creacion == 'contenedor' %}Crear contenedor{% else %}Guardar ubicación{% endif %}
         </button>
         <button type="button" class="btn-secondary" id="limpiarFormulario">
           Limpiar
@@ -723,7 +725,9 @@
 
 <script>
   window.ubicacionesConfig = {
+    modoCreacion: "{{ modo_creacion }}",
     endpoints: {
+      crear: "{% if modo_creacion == 'contenedor' %}{% url 'crear_contenedor' %}{% else %}{% url 'crear_ubicacion_fija' %}{% endif %}",
       ubicaciones: "{% url 'ubicaciones_api' %}",
       mover: "{% url 'mover_contenedor' 0 %}",
       movimientos: "{% url 'movimientos_contenedor' 0 %}",
@@ -732,6 +736,6 @@
 </script>
 
 <script src="{% static 'js/sweetAlert.js' %}"></script>
-<script src="{% static 'js/ubicaciones.js' %}"></script>
+<script src="{% static 'js/ubicaciones.js' %}?v=20261005-creacion-separada"></script>
 
 {% endblock container %}

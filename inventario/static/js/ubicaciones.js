@@ -1,6 +1,8 @@
 (() => {
   const config = window.ubicacionesConfig || {};
   const endpoints = config.endpoints || {};
+  const esCreacionContenedor = config.modoCreacion === "contenedor";
+  const crearEndpoint = endpoints.crear || endpoints.ubicaciones || "/inventario/ubicaciones/api/";
   const ubicacionesEndpoint =
     endpoints.ubicaciones || "/inventario/ubicaciones/api/";
 
@@ -177,6 +179,11 @@
   }
 
   function construirHintTipo(tipoData) {
+    if (esCreacionContenedor && tipoData) {
+      tipoHint.textContent = "El codigo del contenedor se asigna automaticamente.";
+      padreHint.textContent = "Selecciona una ubicacion o caja del mapa y pulsa Usar como posicion inicial. Si no eliges ninguna, quedara directamente en la bodega.";
+      return;
+    }
     if (!tipoData) {
       tipoHint.textContent = "";
       if (padreHint) {
@@ -341,12 +348,12 @@
           ${
             puedeSerPadre
               ? `<button type="button" class="btn-secondary" id="usarComoPadre">
-                   Usar como padre
+                   ${esCreacionContenedor ? "Usar como posicion inicial" : "Usar como padre"}
                  </button>`
               : ""
           }
           <button type="button" class="btn-secondary" id="limpiarPadre">
-            Quitar padre
+            ${esCreacionContenedor ? "Dejar directamente en la bodega" : "Quitar padre"}
           </button>
         </div>
       </div>
@@ -1076,11 +1083,13 @@
     tipoSelect.innerHTML =
       '<option value="">Selecciona un tipo</option>';
     state.tipos.forEach((tipo) => {
+      if ((tipo.value === "CONTENEDOR") !== esCreacionContenedor) return;
       const option = document.createElement("option");
       option.value = tipo.value;
       option.textContent = tipo.value === "CONTENEDOR" ? "Contenedor móvil (caja, canasta...)" : `${tipo.label} · Ubicación fija`;
       tipoSelect.appendChild(option);
     });
+    if (esCreacionContenedor) tipoSelect.value = "CONTENEDOR";
   }
 
   function poblarSelectBodegas() {
@@ -1128,7 +1137,7 @@
     guardarBtn.disabled = isBusy;
     guardarBtn.textContent = isBusy
       ? "Guardando..."
-      : "Guardar ubicación";
+      : esCreacionContenedor ? "Crear contenedor" : "Guardar ubicación";
   }
 
   async function cargarDatos() {
@@ -1174,7 +1183,7 @@
 
       poblarSelectTipos();
       poblarSelectBodegas();
-      construirHintTipo(null);
+      construirHintTipo(obtenerTipo(tipoSelect.value));
       renderTree();
       actualizarDetalle(null);
     } catch (error) {
@@ -1194,6 +1203,7 @@
 
   async function guardarUbicacion(event) {
     event.preventDefault();
+    if (guardarBtn.disabled || !form.reportValidity()) return;
     setFormBusy(true);
 
     const formData = new FormData(form);
@@ -1202,7 +1212,7 @@
     }
 
     try {
-      const response = await fetch(ubicacionesEndpoint, {
+      const response = await fetch(crearEndpoint, {
         method: "POST",
         headers: {
           "X-CSRFToken": csrfToken,
@@ -1237,13 +1247,14 @@
       seleccionarNodo(nodo.id, true);
 
       if (typeof swalToast === "function") {
-        swalToast("success", "Ubicación creada correctamente");
+        swalToast("success", esCreacionContenedor ? "Contenedor creado correctamente" : "Ubicación creada correctamente");
       }
 
       form.reset();
+      if (esCreacionContenedor) tipoSelect.value = "CONTENEDOR";
       bodegaSelect.value = state.bodegaSeleccionada == null ? "" : String(state.bodegaSeleccionada);
       limpiarPadre();
-      construirHintTipo(null);
+      construirHintTipo(obtenerTipo(tipoSelect.value));
     } catch (error) {
       console.error(error);
       if (typeof swalErr === "function") {
@@ -1256,9 +1267,10 @@
 
   function limpiarFormulario() {
     form.reset();
+    if (esCreacionContenedor) tipoSelect.value = "CONTENEDOR";
     bodegaSelect.value = state.bodegaSeleccionada == null ? "" : String(state.bodegaSeleccionada);
     limpiarPadre();
-    construirHintTipo(null);
+    construirHintTipo(obtenerTipo(tipoSelect.value));
   }
 
   function initEventos() {

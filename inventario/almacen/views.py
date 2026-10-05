@@ -241,8 +241,8 @@ class ArticuloSalidaView(APIView):
         return Response(serializer.save(), status=status.HTTP_201_CREATED)
 
 
-def ubicaciones(request):
-    return render(request, "inventario/ubicaciones.html", {})
+def ubicaciones(request, modo_creacion="ubicacion"):
+    return render(request, "inventario/ubicaciones.html", {"modo_creacion": modo_creacion})
 
 
 def mapa_ubicaciones(request):
@@ -262,7 +262,7 @@ def estantes_lote(request):
 
 class UbicacionesView(APIView):
     renderer_classes = [JSONRenderer]
-    def get(self, request):
+    def get(self, request, modo_creacion=None):
         bodega_id = request.GET.get("bodega")
         ubicaciones_qs = (
             Ubicacion.objects.select_related("bodega", "padre")
@@ -319,8 +319,16 @@ class UbicacionesView(APIView):
             status=status.HTTP_200_OK,
         )
 
-    def post(self, request):
+    def post(self, request, modo_creacion=None):
         data = request.data.copy()
+        if modo_creacion == "contenedor":
+            if data.get("tipo") not in (None, "", Ubicacion.Tipo.CONTENEDOR):
+                return Response({"tipo": ["Este formulario solo crea contenedores."]}, status=status.HTTP_400_BAD_REQUEST)
+            data["tipo"] = Ubicacion.Tipo.CONTENEDOR
+        elif modo_creacion == "ubicacion" and data.get("tipo") not in (
+            Ubicacion.Tipo.ESTANTE, Ubicacion.Tipo.ESTIBA, Ubicacion.Tipo.PANEL, Ubicacion.Tipo.DIVISION,
+        ):
+            return Response({"tipo": ["Selecciona un tipo de ubicacion fija."]}, status=status.HTTP_400_BAD_REQUEST)
         if data.get("padre") in ("", "null", None):
             data["padre"] = None
 

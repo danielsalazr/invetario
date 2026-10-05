@@ -29,6 +29,10 @@ urlpatterns = [
     ),
     path("bodegas/api/", views.BodegasView.as_view(), name="bodegas_api"),
     path("ubicaciones/", views.ubicaciones, name="ubicaciones"),
+    path("ubicaciones/nueva/", views.ubicaciones, {"modo_creacion": "ubicacion"}, name="nueva_ubicacion"),
+    path("ubicaciones/contenedores/nuevo/", views.ubicaciones, {"modo_creacion": "contenedor"}, name="nuevo_contenedor"),
+    path("ubicaciones/fijas/api/", views.UbicacionesView.as_view(), {"modo_creacion": "ubicacion"}, name="crear_ubicacion_fija"),
+    path("ubicaciones/contenedores/api/", views.UbicacionesView.as_view(), {"modo_creacion": "contenedor"}, name="crear_contenedor"),
     path("ubicaciones/mapa/", views.mapa_ubicaciones, name="ubicaciones_mapa"),
     path(
         "ubicaciones/distribucion/",
